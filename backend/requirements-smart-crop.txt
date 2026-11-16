@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Optional U2Netp subject centering; use requirements.txt for geometric center crop only.
+rembg[cpu]>=2.0.70,<3

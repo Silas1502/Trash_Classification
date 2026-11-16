@@ -1,0 +1,86 @@
+{
+  "metadata": {
+    "export_time": "2026-11-16T14:33:03.489724",
+    "model_name": "hierarchical_convnext_tiny",
+    "input_size": [
+      320,
+      320
+    ],
+    "version": "1.0.0",
+    "description": "Bộ ngưỡng an toàn 2 Chốt & Tham số Tái thẩm định thích ứng 3 Cấp độ"
+  },
+  "classes": {
+    "labels": [
+      "glass",
+      "metal",
+      "paper",
+      "plastic"
+    ],
+    "num_classes": 4,
+    "sub_to_idx": {
+      "glass": 0,
+      "metal": 1,
+      "paper": 2,
+      "plastic": 3
+    },
+    "details": {
+      "glass": {
+        "index": 0,
+        "name_vi": "Thủy tinh",
+        "tau_conf": 0.83,
+        "k1": 1.5,
+        "suggestion": "Thu gom vào thùng rác tái chế, bọc kín nếu nứt vỡ để đảm bảo an toàn lao động."
+      },
+      "metal": {
+        "index": 1,
+        "name_vi": "Kim loại",
+        "tau_conf": 0.7782,
+        "k1": 2.0,
+        "suggestion": "Rửa sạch lon/hộp kim loại và bỏ vào thùng rác tái chế."
+      },
+      "paper": {
+        "index": 2,
+        "name_vi": "Giấy",
+        "tau_conf": 0.8774,
+        "k1": 2.0,
+        "suggestion": "Giữ giấy khô ráo, làm phẳng và để vào thùng tái chế giấy."
+      },
+      "plastic": {
+        "index": 3,
+        "name_vi": "Nhựa",
+        "tau_conf": 0.7564,
+        "k1": 1.8,
+        "suggestion": "Làm sạch cặn bẩn, thu gom vào thùng rác tái chế nhựa."
+      }
+    }
+  },
+  "gate_thresholds": {
+    "tau_conf_by_idx": {
+      "0": 0.83,
+      "1": 0.7782,
+      "2": 0.8774,
+      "3": 0.7564
+    },
+    "tau_conf_by_name": {
+      "glass": 0.83,
+      "metal": 0.7782,
+      "paper": 0.8774,
+      "plastic": 0.7564
+    },
+    "tau_margin": 0.5434,
+    "best_k2": 2.6
+  },
+  "adaptive_safety_rules": {
+    "w_conf": 0.5,
+    "w_margin": 0.5,
+    "conf_floor_tier1": 0.7,
+    "conf_floor_tier2": 0.65,
+    "tolerance_score": 0.9,
+    "tiers_definition": {
+      "tier1": "Hard Standard Gates: Conf >= tau_conf AND Margin >= tau_margin",
+      "tier2": "Composite Safety Rescue: S_composite >= 1.0 AND Conf >= 0.70",
+      "tier3": "TTA Consensus Rescue: S_composite >= 0.90 AND TTA_Stability >= 0.999 AND Conf >= 0.65",
+      "fallback": "Manual Fallback: Chuyen_Khay_Thu_Cong"
+    }
+  }
+}

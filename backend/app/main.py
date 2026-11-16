@@ -1,0 +1,213 @@
+import asyncio
+import logging
+from collections.abc import Callable
+from contextlib import AsyncExitStack, asynccontextmanager, suppress
+
+import anyio
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+from starlette.datastructures import Headers
+from starlette.exceptions import HTTPException
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+from app.api.router import router
+from app.core.config import Settings
+from app.core.errors import ApiError
+from app.core.safety_gate import SafetyFilter
+from app.db.mongodb import MongoHistory
+from app.db.r2_storage import R2Storage
+from app.db.supabase_db import SupabaseHistory
+from app.db.supabase_storage import SupabaseStorage
+from app.db.cloudinary_storage import CloudinaryStorage
+from app.db.imagekit_storage import ImageKitStorage
+from app.ml.model_loader import DummyPredictor, load_model
+from app.ml.preprocessor import ImagePreprocessor
+
+logger = logging.getLogger(__name__)
+
+
+def _payload(code: str, message: str, **extra) -> dict:
+    return {"detail": message, "error": {"code": code, "message": message, **extra}}
+
+
+class UploadLimits:
+    """Bound multipart bytes before files can accumulate in the parser or spool device."""
+
+    def __init__(self, app: ASGIApp, settings: Settings) -> None:
+        self.app = app
+        self.limits = {
+            "/api/v1/predict/single": settings.max_upload_bytes + 128 * 1024,
+            "/api/v1/predict/batch": settings.max_batch_bytes + 128 * 1024,
+        }
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["method"] != "POST":
+            await self.app(scope, receive, send)
+            return
+        limit = self.limits.get(scope["path"].rstrip("/"))
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+        too_large = "Dữ liệu tải lên vượt giới hạn cho phép."
+        declared = Headers(scope=scope).get("content-length")
+        if declared is not None and declared.isdecimal() and (len(declared) > 15 or int(declared) > limit):
+            await JSONResponse(_payload("upload_too_large", too_large), 413)(scope, receive, send)
+            return
+        slots = scope["app"].state.prediction_slots
+        try:
+            slots.acquire_nowait()
+        except anyio.WouldBlock:
+            busy = JSONResponse(
+                _payload("prediction_busy", "Máy chủ đang xử lý các yêu cầu khác. Hãy thử lại."),
+                503, headers={"Retry-After": "2"},
+            )
+            await busy(scope, receive, send)
+            return
+        received = 0
+
+        async def receive_limited():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise HTTPException(413, too_large)
+            return message
+
+        try:
+            await self.app(scope, receive_limited, send)
+        finally:
+            slots.release()
+
+
+def _health(model: str, db: str, storage: str) -> dict:
+    cloud_ok = db in ("connected", "not_configured") and storage in ("reachable", "not_configured")
+    is_healthy = model in ("loaded", "mock") and cloud_ok
+    return {
+        "status": "healthy" if is_healthy else "degraded",
+        "model": model, "database": db, "storage": storage,
+        "mongodb": db, "r2": storage,  # Backward compatibility
+    }
+
+
+async def _watch_dependencies(app: FastAPI) -> None:
+    state = app.state
+
+    async def check(probe: Callable, name: str, ok: str, failure: str) -> str:
+        try:
+            await probe()
+        except Exception as exc:
+            if state.health.get(name) != failure:
+                logger.warning("%s health probe failed: %s", name, type(exc).__name__)
+            return failure
+        return ok
+
+    async def check_db() -> str:
+        if state.history is None:
+            return "not_configured"
+        return await check(state.history.check, "database", "connected", "disconnected")
+
+    async def check_storage() -> str:
+        if state.storage is None:
+            return "not_configured"
+        return await check(lambda: run_in_threadpool(state.storage.check), "storage", "reachable", "unreachable")
+
+    while True:
+        db, storage = await asyncio.gather(check_db(), check_storage())
+        state.health = _health(state.health["model"], db, storage)
+        await asyncio.sleep(state.settings.health_probe_interval_seconds)
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        state = app.state
+        state.settings = settings
+        state.safety = await run_in_threadpool(SafetyFilter.load, settings.thresholds_path)
+        state.model = await run_in_threadpool(load_model, settings, state.safety.thresholds.classes.labels)
+        state.preprocessor = await run_in_threadpool(
+            ImagePreprocessor, settings.max_image_pixels, settings.smart_crop,
+        )
+        state.ml_slot = anyio.Semaphore(1)
+        state.prediction_slots = anyio.Semaphore(settings.max_prediction_requests)
+        state.storage_slots = anyio.Semaphore(settings.storage_concurrency)
+        state.history = state.storage = None
+
+        async with AsyncExitStack() as cleanup:
+            # 1. Database: Ưu tiên Supabase nếu có cấu hình, ngược lại dùng MongoDB
+            if settings.supabase_url and settings.supabase_key:
+                state.history = SupabaseHistory(settings.supabase_url, settings.supabase_key.get_secret_value())
+                cleanup.callback(state.history.close)
+            elif settings.mongodb_uri:
+                state.history = MongoHistory(settings.mongodb_uri.get_secret_value(), settings.mongodb_db_name)
+                cleanup.callback(state.history.close)
+
+            # 2. Storage: Ưu tiên ImageKit nếu có cấu hình, rồi đến Cloudinary / Supabase / R2
+            if settings.imagekit_private_key and settings.imagekit_url_endpoint:
+                state.storage = ImageKitStorage(settings)
+                cleanup.callback(state.storage.close)
+            elif settings.cloudinary_cloud_name and settings.cloudinary_api_key:
+                state.storage = CloudinaryStorage(settings)
+                cleanup.callback(state.storage.close)
+            elif settings.supabase_url and settings.supabase_key:
+                state.storage = SupabaseStorage(settings)
+                cleanup.callback(state.storage.close)
+            elif settings.r2_account_id:
+                state.storage = R2Storage(settings)
+                cleanup.callback(state.storage.close)
+
+            state.health = _health(
+                "mock" if isinstance(state.model, DummyPredictor) else "loaded",
+                "checking" if state.history else "not_configured",
+                "checking" if state.storage else "not_configured",
+            )
+            watcher = asyncio.create_task(_watch_dependencies(app))
+            try:
+                yield
+            finally:
+                watcher.cancel()
+                with suppress(asyncio.CancelledError):
+                    await watcher
+
+    app = FastAPI(title="Trash Classification API", version="1.0.0", lifespan=lifespan)
+    app.add_middleware(UploadLimits, settings=settings)
+    app.add_middleware(
+        CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=False,
+        allow_methods=["GET", "HEAD", "POST"], allow_headers=["*"], expose_headers=["Content-Disposition"],
+    )
+
+    @app.exception_handler(ApiError)
+    async def service_error(_: Request, exc: ApiError):
+        return JSONResponse(_payload(exc.code, exc.message), exc.status)
+
+    @app.exception_handler(HTTPException)
+    async def http_error(_: Request, exc: HTTPException):
+        code = "upload_too_large" if exc.status_code == 413 else "http_error"
+        return JSONResponse(_payload(code, str(exc.detail)), exc.status_code, headers=exc.headers)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(_: Request, exc: RequestValidationError):
+        errors = [{"loc": entry["loc"], "msg": entry["msg"], "type": entry["type"]} for entry in exc.errors()]
+        return JSONResponse(_payload("validation_error", "Dữ liệu yêu cầu không hợp lệ.", fields=errors), 422)
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, exc: Exception):
+        logger.error("Unhandled API error for %s", request.method, exc_info=exc)
+        response = JSONResponse(_payload("internal_error", "Có lỗi khi xử lý yêu cầu."), 500)
+        # ServerErrorMiddleware sits outside CORS for unhandled exceptions.
+        origin = request.headers.get("origin")
+        if origin and ("*" in settings.cors_origins or origin in settings.cors_origins):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+        return response
+
+    app.include_router(router)
+    return app
+
+
+app = create_app()

@@ -1,0 +1,55 @@
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Large Datasets & Archives (Excluded from git tracking)
+data/
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Model weights & Checkpoints (Heavy binary files > 100MB)
+checkpoints/
+weights/
+*.h5
+*.keras
+*.weights.h5
+*.ckpt*
+*.pt
+*.pth
+*.onnx
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+
+# Node & Frontend Build Artifacts
+node_modules/
+.next/
+.npm-cache/
+.qa/
+*.tsbuildinfo
+next-env.d.ts
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

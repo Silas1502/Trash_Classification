@@ -1,3 +1,13 @@
+---
+title: Trash Classification API
+emoji: ♻️
+colorFrom: green
+colorTo: blue
+sdk: docker
+pinned: false
+app_port: 7860
+---
+
 # Khóa Luận Tốt Nghiệp: Phân Loại Rác Thải Bằng Deep Learning (Trash Classification)
 
 Dự án nghiên cứu và xây dựng hệ thống phân loại rác thải tự động dựa trên thị giác máy tính và học sâu (Deep Learning), ứng dụng kiến trúc **Hierarchical ConvNeXt-Tiny** kết hợp kỹ thuật huấn luyện hai giai đoạn (Two-Stage Training) và suy luận đa góc nhìn (5-View TTA).

@@ -242,6 +242,7 @@ TRASH_CLASSIFICATION_SYSTEM/
    - **Chốt biên khoảng cách:** $Margin = P_{Top1} - P_{Top2}$. Chốt đạt khi $Margin \ge \tau_{margin}$.
    - **Tự động:** Cả hai chốt đạt. Backend trả `Tu_Dong_Gap` và `Thành công`.
    - **Thủ công:** Một hoặc cả hai chốt chưa đạt. Backend trả `Chuyen_Khay_Thu_Cong` và `Cần kiểm tra`, kèm lý do của từng chốt chưa đạt.
+   - Kết quả mô phỏng luôn được đánh dấu `Thủ công`. Quy tắc hai chốt áp dụng cho dự đoán từ checkpoint thật.
    - Cấu hình web dùng `ADAPTIVE_ASSESSMENT_ENABLED=false` để tắt hai nhánh xét lại bằng điểm bù trừ và đồng thuận TTA. Khi bật suy luận 5 góc nhìn, TTA vẫn tính trung bình xác suất đầu vào cho hai chốt.
    - Các trường `composite_score`, `tta_stability` và `decision_tier` vẫn được lưu để đọc lịch sử và giữ định dạng API. Việc phân luồng hiện tại dựa vào kết quả của hai chốt cơ sở.
 7. **Bước 7: Giải thích mô hình bằng XAI (Grad-CAM & Spatial Energy Map - Cell 12):**
@@ -318,7 +319,11 @@ TRASH_CLASSIFICATION_SYSTEM/
     "file_size": 245100,
     "mime_type": "image/jpeg",
     "inference_time_ms": 38.5,
-    "model_version": "convnext_tiny_v2"
+    "xai_time_ms": 12.0,
+    "model_version": "best_v2_convnext_retrained",
+    "tta_views": 5,
+    "crop_box": [0, 0, 320],
+    "crop_strategy": "image_center"
   }
 }
 ```

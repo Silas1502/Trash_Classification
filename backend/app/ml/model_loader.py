@@ -79,9 +79,20 @@ def _prepare_checkpoint(settings: Settings) -> Path | None:
     return path
 
 
+def _clean_keras_config(obj: object) -> None:
+    if isinstance(obj, dict):
+        obj.pop("quantization_config", None)
+        for value in obj.values():
+            _clean_keras_config(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            _clean_keras_config(item)
+
+
 def _deserialize_checkpoint(path: Path) -> keras.Model:
     with ZipFile(path) as archive:
         config = json.loads(archive.read("config.json"))
+    _clean_keras_config(config)
     custom_objects = {"CosineDense": CosineDense}
     lambda_layers = [layer for layer in config["config"]["layers"] if layer["class_name"] == "Lambda"]
     if not lambda_layers:

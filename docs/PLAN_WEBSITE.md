@@ -33,13 +33,12 @@
 ### Mô tả dự án
 Xây dựng một ứng dụng web **Fullstack** hoàn chỉnh cho bài toán **Phân loại rác thải tự động (Trash Classification App)** ứng dụng Thị giác máy tính và Học sâu (Deep Learning). Hệ thống cho phép người dùng tải lên 1 ảnh đơn lẻ hoặc xử lý hàng loạt theo thư mục ảnh. 
 
-Hệ thống tích hợp mô hình học sâu kết hợp **Hệ thống kiểm soát an toàn 2 Chốt chặn (Two-Gate Safety) & Quy trình Tái thẩm định thích ứng 3 Cấp độ (3-Tier Adaptive Safety Filter)** nhằm tự động đánh giá:
-- **Loại rác:** Nhựa, Giấy, Kim loại, Thủy tinh, Hữu cơ, Khác.
-- **Độ tin cậy (%):** Xác suất tin cậy của nhãn phân loại cao nhất ($Conf = \max(P)$).
-- **Chốt 1 (%):** Điểm đánh giá theo ngưỡng tin cậy an toàn thích ứng riêng từng lớp ($\tau_{conf} = \mu_c - k_1\sigma_c$).
-- **Chốt 2 (%):** Điểm đánh giá theo ngưỡng khoảng cách biên phân biệt ($\tau_{margin} = \mu_m - k_2\sigma_m$).
-- **Luồng xử lý:** Tự động (`Tu_Dong_Gap` khi vượt qua Cấp 1 Hard Gates, Cấp 2 Bù trừ an toàn hoặc Cấp 3 Bảo lãnh TTA) hoặc Thủ công (`Chuyen_Khay_Thu_Cong` khi có độ bất định cao).
-- **Trạng thái:** Thành công (kết quả hợp lệ) hoặc Cần kiểm tra (mẫu cận biên/nghi ngờ vi phạm an toàn).
+Hệ thống dùng mô hình học sâu và hai chốt cơ sở để phân luồng kết quả.
+- **Loại rác:** Nhựa, Giấy, Kim loại hoặc Thủy tinh theo checkpoint hiện tại.
+- **Chốt 1 – Độ tin cậy:** Xác suất cao nhất của mô hình, so với ngưỡng riêng của lớp dự đoán.
+- **Chốt 2 – Biên khoảng cách:** Chênh lệch xác suất giữa hai lớp đứng đầu, so với ngưỡng chung.
+- **Luồng xử lý:** Cả hai chốt đạt → `Tự động` (`Tu_Dong_Gap`), trạng thái `Thành công`. Một trong hai chốt chưa đạt → `Thủ công` (`Chuyen_Khay_Thu_Cong`), trạng thái `Cần kiểm tra`.
+- **Hiển thị:** Mỗi chốt có định dạng `giá trị % (ngưỡng %)` cùng kết quả đạt hoặc chưa đạt trong phần chi tiết.
 - **Trí tuệ nhân tạo có thể giải thích (Explainable AI - XAI):** Tích hợp kỹ thuật **Grad-CAM (Gradient-weighted Class Activation Mapping)** và **Spatial Activation Energy Map** để trực quan hóa bản đồ nhiệt (Heatmap Overlay), minh bạch hóa lý do mô hình đưa ra dự đoán phân loại.
 
 Toàn bộ hình ảnh gốc và ảnh phân tích XAI được lưu trữ trên **Cloudinary** (hoặc Cloudflare R2), dữ liệu kết quả được lưu trữ an toàn trên **Supabase** (PostgreSQL) hoặc **MongoDB Atlas**. Cả hai dịch vụ cốt lõi đều hỗ trợ gói Free 100% không yêu cầu thẻ tín dụng, đi kèm hệ thống UptimeRobot kép giữ trạng thái online 24/7.
@@ -108,7 +107,7 @@ TRASH_CLASSIFICATION_SYSTEM/
 │   │   ├── 📂 core/
 │   │   │   ├── config.py                     # Quản lý cấu hình & biến môi trường (.env)
 │   │   │   ├── safety_thresholds.json        # File JSON chứa toàn bộ ngưỡng an toàn trích xuất từ Notebook (Cell 13)
-│   │   │   └── safety_gate.py                # Đọc safety_thresholds.json, vận hành Tái thẩm định thích ứng 3 cấp độ
+│   │   │   └── safety_gate.py                # Đọc ngưỡng và phân luồng theo hai chốt cơ sở
 │   │   ├── 📂 db/
 │   │   │   ├── supabase_db.py        # Adapter Supabase PostgreSQL (REST API & Auth key)
 │   │   │   ├── cloudinary_storage.py # Adapter Cloudinary Upload & CDN URL
@@ -138,20 +137,20 @@ TRASH_CLASSIFICATION_SYSTEM/
 │   │   │   ├── 📂 classify/                  
 │   │   │   │   └── page.tsx                  # Trang Phân loại (Tab Một ảnh & Tab Nhiều ảnh)
 │   │   │   └── 📂 history/                   
-│   │   │       └── page.tsx                  # Trang Lịch sử (Table & Split View xem chi tiết)
+│   │   │       └── page.tsx                  # Trang Lịch sử (Bảng và cửa sổ chi tiết)
 │   │   ├── 📂 components/                    # UI Components
 │   │   │   ├── 📂 layout/
 │   │   │   │   └── Sidebar.tsx               # Sidebar màu xanh navy đậm cố định
 │   │   │   ├── 📂 classify/
 │   │   │   │   ├── SingleImageUpload.tsx     # Khối kéo thả 1 ảnh + Xem trước (Preview)
-│   │   │   │   ├── SingleImageResult.tsx     # Hiển thị Loại rác, 3 thanh Progress, Gợi ý
+│   │   │   │   ├── SingleImageResult.tsx     # Hiển thị Loại rác, hai chốt có ngưỡng, gợi ý
 │   │   │   │   ├── BatchImageUpload.tsx      # Kéo thả nhiều ảnh hoặc chọn thư mục
 │   │   │   │   ├── BatchProgressBar.tsx      # 4 thẻ thống kê + Thanh tiến trình thời gian thực
 │   │   │   │   └── BatchResultTable.tsx      # Bảng kết quả danh sách ảnh đã xử lý
 │   │   │   ├── 📂 history/
 │   │   │   │   ├── HistoryFilterBar.tsx      # Bộ lọc tìm kiếm, loại rác, luồng, thời gian
 │   │   │   │   ├── HistoryTable.tsx          # Bảng danh sách lịch sử có phân trang
-│   │   │   │   └── HistoryDetailPanel.tsx    # Panel chi tiết bên phải (Ảnh lớn Cloudinary/R2 + Chỉ số)
+│   │   │   │   └── PredictionDetails.tsx     # Nội dung cửa sổ chi tiết dự đoán
 │   │   │   └── 📂 ui/                        # Button, Badge, ProgressBar, Input, Modal...
 │   │   ├── 📂 services/                      # Giao tiếp HTTP API
 │   │   │   ├── api.ts                        # Cấu hình Axios client
@@ -187,15 +186,15 @@ TRASH_CLASSIFICATION_SYSTEM/
 |---|---|---|---|
 | **B1** | Tạo FastAPI App & Swagger UI | Khởi tạo ứng dụng FastAPI với tài liệu API tự động tại `/docs` (Swagger UI) và `/redoc`. | Bắt buộc |
 | **B2** | Health Check (`GET /health`) | Trả về trạng thái hoạt động: Model (`loaded`/`error`), Database Supabase (`connected`/`disconnected`) và Storage Cloudinary (`reachable`). Thiết kế phản hồi siêu nhẹ (< 10ms) phục vụ UptimeRobot Keep-Alive và Frontend Pre-warming ping. | Bắt buộc |
-| **B3** | Phân loại 1 ảnh (`POST /predict/single`) | **Quy trình xử lý hoàn chỉnh chuẩn từ `kltn-convnext-tiny.ipynb`:**<br/>1. Nhận file ảnh qua `multipart/form-data`, tải ảnh lên Cloudinary (hoặc R2) lấy URL công khai.<br/>2. **Tiền xử lý dữ liệu chuẩn Deep Learning:**<br/>&nbsp;&nbsp;• *Giải mã & chuẩn màu:* Decode ảnh buffer sang mảng RGB 3 kênh.<br/>&nbsp;&nbsp;• *Smart Auto-Crop / Center Square:* Tách contour căn tâm rác (rembg u2netp) hoặc cắt vuông $(a, a)$ căn giữa tâm để giữ nguyên tỷ lệ 1:1, không méo vật thể.<br/>&nbsp;&nbsp;• *Tái định cỡ quang học (Area Resampling):* Resize về kích thước chuẩn $(320, 320)$ bằng thuật toán `ResizeMethod.AREA` (kèm `antialias=True`) chống răng cưa.<br/>&nbsp;&nbsp;• *Chuẩn hóa ConvNeXt:* Chuyển sang `float32` và chuẩn hóa qua `preprocess_convnext`.<br/>&nbsp;&nbsp;• *Suy luận TTA / Single-View:* Đưa qua tầng `CosineDense(scale=20.0)` thu logits và tính xác suất Softmax (hỗ trợ 5-View TTA ensemble).<br/>3. **Hệ thống kiểm soát an toàn 2 Chốt & Quy trình Tái thẩm định thích ứng 3 Cấp độ:** Đánh giá lần lượt Cấp 1 (Hard Standard Gates), Cấp 2 (Composite Safety Rescue), Cấp 3 (TTA Consensus Rescue) $\rightarrow$ Định tuyến luồng `Tự động`/`Thủ công`, trạng thái `Thành công`/`Cần kiểm tra`.<br/>4. **XAI Grad-CAM:** Trích xuất Activation Heatmap Overlay và upload lên Cloudinary (hoặc R2).<br/>5. Ghi dữ liệu vào Supabase PostgreSQL (hoặc MongoDB Atlas) và trả về response cho client. | Bắt buộc |
-| **B4** | Phân loại nhiều ảnh / thư mục (`POST /predict/batch`) | Nhận danh sách nhiều file ảnh (`List[UploadFile]`). Upload ảnh song song lên Cloudinary, thực hiện suy luận theo batch để tối ưu tốc độ GPU/CPU, đánh giá an toàn qua Quy trình tái thẩm định thích ứng 3 cấp độ cho từng ảnh và ghi đồng thời vào Supabase Database. Trả về kết quả danh sách kèm thống kê tiến độ. | Bắt buộc |
-| **B5** | Hệ thống kiểm soát an toàn 2 Chốt & Quy trình Tái thẩm định thích ứng 3 Cấp độ (3-Tier Adaptive Safety Filter) | **Chuẩn thuật toán từ `docs/Luong_hoat_dong.md` (Mục 7) & Cell 10 notebook (Nạp động từ `safety_thresholds.json` - Cell 13):**<br/>1. **6 trường kết quả cốt lõi + trường giải trình an toàn:**<br/>&nbsp;&nbsp;• **Loại rác:** Nhựa, Giấy, Kim loại, Thủy tinh, Hữu cơ, Khác.<br/>&nbsp;&nbsp;• **Độ tin cậy (%):** Điểm xác suất Softmax Top-1 ($Conf = \max(P)$).<br/>&nbsp;&nbsp;• **Chốt 1 (%):** Ngưỡng tin cậy thích ứng riêng từng lớp ($\tau_{conf} = \mu_c - k_1\sigma_c$).<br/>&nbsp;&nbsp;• **Chốt 2 (%):** Ngưỡng biên phân biệt chung ($\tau_{margin} = \mu_m - k_2\sigma_m$, với $Margin = Conf_{Top1} - Conf_{Top2}$).<br/>&nbsp;&nbsp;• **Luồng xử lý:** `Tự động` hoặc `Thủ công`.<br/>&nbsp;&nbsp;• **Trạng thái:** `Thành công` hoặc `Cần kiểm tra`.<br/>2. **Quy trình tái thẩm định thích ứng cho mẫu có độ bất định:**<br/>&nbsp;&nbsp;• *Cấp 1 (Hard Standard Gates):* $Conf \ge \tau_{conf}$ VÀ $Margin \ge \tau_{margin} \rightarrow$ **Tự động** (`Tu_Dong_Gap`).<br/>&nbsp;&nbsp;• *Cấp 2 (Composite Safety Rescue):* $S_{composite} = 0.5 \cdot \frac{Conf}{\tau_{conf}} + 0.5 \cdot \frac{Margin}{\tau_{margin}} \ge 1.0$ VÀ $Conf \ge 70\% \rightarrow$ Cứu nguy bù trừ an toàn $\rightarrow$ **Tự động** (`Tu_Dong_Gap`).<br/>&nbsp;&nbsp;• *Cấp 3 (TTA Consensus Rescue):* $S_{composite} \ge 0.90$ VÀ $TTA\_Stability = 1.0$ (100% 5 view đồng thuận) VÀ $Conf \ge 65\% \rightarrow$ Cứu nguy bảo lãnh đồng thuận $\rightarrow$ **Tự động** (`Tu_Dong_Gap`).<br/>&nbsp;&nbsp;• *Phân luồng thủ công (Manual Fallback):* Không thỏa mãn cấp nào $\rightarrow$ **Thủ công** (`Chuyen_Khay_Thu_Cong`), trạng thái `Cần kiểm tra`, kèm giải trình lý do vi phạm từng chốt. | Bắt buộc |
+| **B3** | Phân loại 1 ảnh (`POST /predict/single`) | **Quy trình xử lý hoàn chỉnh chuẩn từ `kltn-convnext-tiny.ipynb`:**<br/>1. Nhận file ảnh qua `multipart/form-data`, tải ảnh lên Cloudinary (hoặc R2) lấy URL công khai.<br/>2. **Tiền xử lý dữ liệu chuẩn Deep Learning:**<br/>&nbsp;&nbsp;• *Giải mã & chuẩn màu:* Decode ảnh buffer sang mảng RGB 3 kênh.<br/>&nbsp;&nbsp;• *Smart Auto-Crop / Center Square:* Tách contour căn tâm rác (rembg u2netp) hoặc cắt vuông $(a, a)$ căn giữa tâm để giữ nguyên tỷ lệ 1:1, không méo vật thể.<br/>&nbsp;&nbsp;• *Tái định cỡ quang học (Area Resampling):* Resize về kích thước chuẩn $(320, 320)$ bằng thuật toán `ResizeMethod.AREA` (kèm `antialias=True`) chống răng cưa.<br/>&nbsp;&nbsp;• *Chuẩn hóa ConvNeXt:* Chuyển sang `float32` và chuẩn hóa qua `preprocess_convnext`.<br/>&nbsp;&nbsp;• *Suy luận TTA / Single-View:* Đưa qua tầng `CosineDense(scale=20.0)` thu logits và tính xác suất Softmax (hỗ trợ 5-View TTA ensemble).<br/>3. **Phân luồng theo hai chốt cơ sở:** So sánh độ tin cậy và biên khoảng cách với các ngưỡng tương ứng. Cả hai đạt thì trả `Tự động` và `Thành công`. Nếu một chốt chưa đạt, trả `Thủ công` và `Cần kiểm tra`.<br/>4. **XAI Grad-CAM:** Trích xuất Activation Heatmap Overlay và upload lên Cloudinary (hoặc R2).<br/>5. Ghi dữ liệu vào Supabase PostgreSQL (hoặc MongoDB Atlas) và trả về response cho client. | Bắt buộc |
+| **B4** | Phân loại nhiều ảnh / thư mục (`POST /predict/batch`) | Nhận danh sách nhiều file ảnh (`List[UploadFile]`). Upload ảnh song song lên Cloudinary, thực hiện suy luận theo batch để tối ưu tốc độ GPU/CPU, áp dụng cùng quy tắc hai chốt cơ sở cho từng ảnh và ghi đồng thời vào Supabase Database. Trả về kết quả danh sách kèm thống kê tiến độ. | Bắt buộc |
+| **B5** | Phân luồng theo hai chốt cơ sở | Backend đọc ngưỡng độ tin cậy theo lớp và ngưỡng biên khoảng cách chung từ `safety_thresholds.json`.<br/>- **Tự động:** Độ tin cậy và biên khoảng cách đều đạt ngưỡng tương ứng.<br/>- **Thủ công:** Ít nhất một chốt chưa đạt. Trường `reason` ghi rõ chốt nào chưa đạt.<br/>- API trả giá trị đo (`confidence`, `margin`), hai ngưỡng (`checkpoint_1`, `checkpoint_2`) và cờ đạt ngưỡng tương ứng. | Bắt buộc |
 | **B6** | Input Validation bằng Pydantic | Xác thực định dạng tệp ảnh đầu vào (`image/jpeg`, `image/png`, `image/webp`), kích thước file tối đa cho phép. Trả mã lỗi `400/422` kèm thông báo rõ ràng khi dữ liệu không hợp lệ. | Bắt buộc |
 | **B7** | Lấy danh sách lịch sử (`GET /history`) | Truy vấn lịch sử từ Supabase Database (hoặc MongoDB Atlas) hỗ trợ phân trang (`page`, `limit`), sắp xếp giảm dần theo thời gian (`created_at: desc`), lọc theo `waste_type`, `pipeline_type`, khoảng thời gian và tìm kiếm theo tên file. | Bắt buộc |
 | **B8** | Chi tiết 1 bản ghi lịch sử (`GET /history/{id}`) | Lấy đầy đủ thông tin chi tiết của 1 lượt dự đoán theo `id`, bao gồm URL hình ảnh từ Cloudinary (hoặc R2), các chỉ số dự đoán và metadata. | Bắt buộc |
 | **B9** | Xuất dữ liệu lịch sử (`GET /history/export`) | Xuất toàn bộ dữ liệu lịch sử hoặc dữ liệu sau khi lọc ra file `.csv` hoặc `.xlsx` để người dùng tải về báo cáo. | Nâng cao |
 | **B10**| CORS Middleware & Error Handling | Cấu hình middleware CORS cho phép frontend Next.js gọi API; cơ chế bắt lỗi tập trung (Global Exception Handler) chuẩn hóa format lỗi JSON. | Bắt buộc |
-| **B11**| Thông tin Model (`GET /model-info`) | Trả về thông tin kiến trúc mô hình (ConvNeXt-Tiny), phiên bản checkpoint, kích thước ảnh đầu vào ($320 \times 320$) và toàn bộ nội dung cấu hình bộ ngưỡng an toàn đọc trực tiếp từ file `safety_thresholds.json`. | Bonus |
+| **B11**| Thông tin Model (`GET /model-info`) | Trả về thông tin kiến trúc mô hình (ConvNeXt-Tiny), phiên bản checkpoint, kích thước ảnh đầu vào ($320 \times 320$) và toàn bộ nội dung cấu hình bộ ngưỡng an toàn đọc trực tiếp từ file `safety_thresholds.json`. Trường `adaptive_assessment_enabled` có giá trị `false` ở cấu hình hiện tại. | Bonus |
 | **B12**| Giải thích mô hình với XAI (`Grad-CAM Engine`) | Trích xuất bản đồ kích hoạt không gian (Spatial Activation Map) và Grad-CAM từ tầng tích chập cuối (`convnext_tiny_stage_3_block_2_identity`). Tính toán trọng số gradients, áp dụng Colormap JET và hòa trộn phủ nhiệt (Overlay) lên ảnh gốc ($\alpha = 0.48$). Tự động lưu ảnh phân tích XAI lên Cloudinary (hoặc R2) và trả về URL ảnh phủ nhiệt (`xai_overlay_url`). | Nâng cao |
 
 #### Chi tiết Quy trình Xử lý Dữ liệu trước khi nạp vào Mô hình (Trích xuất từ `kltn-convnext-tiny.ipynb`):
@@ -237,36 +236,14 @@ TRASH_CLASSIFICATION_SYSTEM/
      * *View 5:* Cắt trung tâm 90% (Center Crop 90%) rồi tái định cỡ Area về $320 \times 320$.
    - Trích xuất Logits từ tầng `CosineDense(scale=20.0)` và tính xác suất Softmax cho từng View: $P^{(v)} = \text{softmax}(\text{logits}^{(v)})$.
    - Tổng hợp xác suất Softmax Ensemble trung bình: $P = \frac{1}{5}\sum_{v=1}^5 P^{(v)}$ (Backend cũng hỗ trợ chế độ Single-View chạy nhanh khi cần độ trễ cực thấp < 50ms).
-6. **Bước 6: Hệ thống kiểm soát an toàn 2 Chốt & Quy trình Tái thẩm định thích ứng 3 Cấp độ (3-Tier Adaptive Safety Filter):**
-   *(Kế thừa nguyên bản thiết kế thuật toán an toàn tại Mục 7 trong `docs/Luong_hoat_dong.md`, Cell 10 và xuất cấu hình động tại Cell 13 trong notebook `kltn-convnext-tiny.ipynb`)*
-   - **Cơ chế nạp động từ file cấu hình (Zero Hardcoding):**
-     * Toàn bộ giá trị ngưỡng ($\tau_{conf}$ từng lớp, $\tau_{margin}$ chung, hệ số $k_1, k_2$, trọng số bù trừ $W_{conf}, W_{margin}$, các ngưỡng sàn và chuỗi gợi ý tiếng Việt) được nạp trực tiếp từ file `safety_thresholds.json` khi Backend khởi động.
-     * Khi cần tinh chỉnh ngưỡng an toàn hoặc thêm nhãn mới, hệ thống chỉ cần đọc file JSON này mà không phải sửa hay build lại mã nguồn Python.
-   - **Xác định các chỉ số suy luận cốt lõi:**
-     * Độ tự tin Top-1: $Conf = \max_c P(c)$.
-     * Khoảng cách biên phân biệt Top 1 - Top 2: $Margin = Conf_{Top1} - Conf_{Top2}$.
-     * Độ ổn định đồng thuận 5 góc nhìn TTA (Consensus Stability): $TTA\_Stability = \frac{1}{5}\sum_{v=1}^5 \mathbb{I}(\text{pred}^{(v)} == \text{pred}_{final})$.
-   - **Khóa bộ ngưỡng an toàn thống kê trên tập Validation ($\mu - k\sigma$):**
-     * *Chốt 1 ($\tau_{conf}$ - Thích ứng riêng từng lớp):* $\tau_{conf}(c) = \mu_c - k_1(c)\sigma_c$ (ví dụ: các lớp Glass, Metal, Paper, Plastic có ngưỡng tự tin riêng được hiệu chuẩn trên tập validation).
-     * *Chốt 2 ($\tau_{margin}$ - Chung toàn hệ thống):* $\tau_{margin} = \mu_m - k_2\sigma_m$ (khống chế trường hợp mô hình phân vân giữa 2 lớp rác tương đồng).
-   - **Chuẩn hóa điểm an toàn thành phần & Điểm an toàn kết hợp (Composite Safety Score):**
-     $$s_{conf} = \frac{Conf}{\tau_{conf}(c)}, \quad s_{margin} = \frac{Margin}{\tau_{margin}}$$
-     $$S_{composite} = 0.50 \cdot s_{conf} + 0.50 \cdot s_{margin}$$
-   - **Vận hành quy trình tái thẩm định thích ứng 3 cấp độ cho mẫu có độ bất định:**
-     * **Cấp 1 — Bộ lọc chuẩn kép cơ sở (Hard Standard Gates):**
-       $$\text{Điều kiện:} \quad (Conf \ge \tau_{conf}(c)) \quad \text{VÀ} \quad (Margin \ge \tau_{margin})$$
-       $\rightarrow$ **Quyết định:** Luồng `Tự động` (`Tu_Dong_Gap`), Trạng thái `Thành công`. Lý do: *"Đạt chuẩn cơ sở 5-View TTA (Chốt 1: s_conf | Chốt 2: s_margin)"*.
-     * **Cấp 2 — Cơ chế cứu nguy bù trừ an toàn (Composite Safety Rescue):**
-       Áp dụng cho các mẫu trượt Cấp 1 do một chốt hơi thấp nhưng chốt còn lại áp đảo (ví dụ $Conf = 99\%$ nhưng $Margin$ hơi hẹp):
-       $$\text{Điều kiện:} \quad (S_{composite} \ge 1.0) \quad \text{VÀ} \quad (Conf \ge 70\%)$$
-       $\rightarrow$ **Quyết định:** Luồng `Tự động` (`Tu_Dong_Gap`), Trạng thái `Thành công`. Lý do: *"Cứu nguy bù trừ an toàn (Điểm: S_composite >= 100%)"*.
-     * **Cấp 3 — Cửa phụ bảo lãnh đồng thuận đa góc nhìn (TTA Consensus Rescue):**
-       Áp dụng cho mẫu trượt Cấp 2 nhưng nhận được sự bảo lãnh an toàn tuyệt đối từ cả 5 biến thể hình học TTA:
-       $$\text{Điều kiện:} \quad (S_{composite} \ge 0.90) \quad \text{VÀ} \quad (TTA\_Stability \ge 0.999) \quad \text{VÀ} \quad (Conf \ge 65\%)$$
-       $\rightarrow$ **Quyết định:** Luồng `Tự động` (`Tu_Dong_Gap`), Trạng thái `Thành công`. Lý do: *"Cứu nguy bảo lãnh TTA 100% (Điểm: S_composite >= 90% | Đồng thuận: 100%)"*.
-     * **Phân luồng thủ công (Manual Fallback):**
-       Mẫu không thỏa mãn bất kỳ tiêu chí nào trong 3 cấp trên:
-       $\rightarrow$ **Quyết định:** Luồng `Thủ công` (`Chuyen_Khay_Thu_Cong`), Trạng thái `Cần kiểm tra`. Ghi rõ lý do vi phạm chi tiết từng chốt (ví dụ: *"Chốt 1: Tự tin thấp lớp Nhựa (64.2% < 85.0%) | Chốt 2: Biên Margin hẹp (12.1% < 45.0%)"*).
+6. **Bước 6: Phân luồng theo hai chốt cơ sở:**
+   - Backend nạp ngưỡng độ tin cậy riêng theo lớp ($\tau_{conf}(c)$) và ngưỡng biên khoảng cách chung ($\tau_{margin}$) từ `safety_thresholds.json` khi khởi động.
+   - **Chốt độ tin cậy:** $Conf = \max_c P(c)$. Chốt đạt khi $Conf \ge \tau_{conf}(c)$ với $c$ là lớp dự đoán.
+   - **Chốt biên khoảng cách:** $Margin = P_{Top1} - P_{Top2}$. Chốt đạt khi $Margin \ge \tau_{margin}$.
+   - **Tự động:** Cả hai chốt đạt. Backend trả `Tu_Dong_Gap` và `Thành công`.
+   - **Thủ công:** Một hoặc cả hai chốt chưa đạt. Backend trả `Chuyen_Khay_Thu_Cong` và `Cần kiểm tra`, kèm lý do của từng chốt chưa đạt.
+   - Cấu hình web dùng `ADAPTIVE_ASSESSMENT_ENABLED=false` để tắt hai nhánh xét lại bằng điểm bù trừ và đồng thuận TTA. Khi bật suy luận 5 góc nhìn, TTA vẫn tính trung bình xác suất đầu vào cho hai chốt.
+   - Các trường `composite_score`, `tta_stability` và `decision_tier` vẫn được lưu để đọc lịch sử và giữ định dạng API. Việc phân luồng hiện tại dựa vào kết quả của hai chốt cơ sở.
 7. **Bước 7: Giải thích mô hình bằng XAI (Grad-CAM & Spatial Energy Map - Cell 12):**
    - Trích xuất ma trận đặc trưng không gian $F \in \mathbb{R}^{10 \times 10 \times C}$ từ tầng cuối trước pooling (`convnext_tiny_stage_3_block_2_identity`).
    - Tính toán bản đồ năng lượng kích hoạt: $\text{Energy}_{i,j} = \sqrt{\frac{1}{C}\sum_k (F_{i,j}^k)^2}$.
@@ -282,16 +259,19 @@ TRASH_CLASSIFICATION_SYSTEM/
   "image_url": "https://res.cloudinary.com/dxyzt123/image/upload/v1794820000/trash_classification/uploads/single/2026/11/16/c1f7b0a8_plastic_bottle_01.jpg",
   "xai_overlay_url": "https://res.cloudinary.com/dxyzt123/image/upload/v1794820000/trash_classification/uploads/xai/2026/11/16/c1f7b0a8_gradcam_overlay.jpg",
   "waste_type": "Nhựa",
-  "confidence": 96.5,
-  "margin": 91.8,
-  "checkpoint_1": 94.2,
-  "checkpoint_2": 91.8,
-  "composite_score": 102.4,
+  "confidence": 90.0,
+  "margin": 85.0,
+  "checkpoint_1": 75.64,
+  "checkpoint_2": 54.34,
+  "confidence_gate_passed": true,
+  "margin_gate_passed": true,
+  "composite_score": 137.7036,
   "tta_stability": 100.0,
   "decision_tier": "Tier 1: Đạt chuẩn cơ sở",
+  "decision": "Tu_Dong_Gap",
   "pipeline_type": "Tự động",
   "status": "Thành công",
-  "reason": "Đạt chuẩn cơ sở 5-View TTA (Chốt 1: 1.02x | Chốt 2: 1.00x)",
+  "reason": "Đạt cả hai chốt (Chốt 1: 1.19x | Chốt 2: 1.56x).",
   "suggestion": "Thu gom vào thùng rác tái chế.",
   "created_at": "2026-11-16T08:32:15.000Z"
 }
@@ -306,7 +286,7 @@ TRASH_CLASSIFICATION_SYSTEM/
 | **D1** | Khởi tạo Cloudinary Storage (hoặc R2) | Đăng ký Cloudinary miễn phí 25GB bằng Google trong 10 giây (không cần thẻ). Lấy `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` để cấp phát CDN HTTPS vĩnh viễn. (Hỗ trợ dự phòng Cloudflare R2). | Bắt buộc |
 | **D2** | Module kết nối Cloud Storage (`cloudinary_storage.py` / `r2_storage.py`) | Sử dụng SDK `cloudinary` upload file ảnh rác và ảnh nhiệt XAI vào thư mục `trash_classification/uploads/single|batch|xai/YYYY/MM/DD/`, trả về URL công khai load tốc độ cao. | Bắt buộc |
 | **D3** | Khởi tạo Supabase Database (hoặc MongoDB Atlas) | Tạo Project `trash-classification` trên Supabase (khu vực Singapore), gói Free 100% không cần thẻ tín dụng. Cấu hình bảng PostgreSQL qua SQL Editor. (Hỗ trợ dự phòng MongoDB Atlas). | Bắt buộc |
-| **D4** | Thiết kế Bảng / Collection `prediction_logs` | Lưu trữ kết quả phân loại với các trường: `id` (UUID), `file_name`, `image_url` (từ Cloudinary/R2), `xai_overlay_url` (ảnh phủ nhiệt Grad-CAM), `waste_type`, `confidence`, `margin`, `checkpoint_1`, `checkpoint_2`, `composite_score`, `tta_stability`, `decision_tier`, `reason`, `pipeline_type`, `status`, `suggestion`, `created_at` và `metadata`. | Bắt buộc |
+| **D4** | Thiết kế Bảng / Collection `prediction_logs` | Lưu trữ kết quả phân loại với các trường: `id` (UUID), `file_name`, `image_url` (từ Cloudinary/R2), `xai_overlay_url` (ảnh phủ nhiệt Grad-CAM), `waste_type`, `confidence`, `margin`, `checkpoint_1`, `checkpoint_2`, `confidence_gate_passed`, `margin_gate_passed`, `composite_score`, `tta_stability`, `decision_tier`, `decision`, `reason`, `pipeline_type`, `status`, `suggestion`, `created_at` và `metadata`. | Bắt buộc |
 | **D5** | Quản lý phiên xử lý nhiều ảnh | Quản lý thông tin phiên xử lý nhiều ảnh gồm: `batch_id`, `total_images`, `processed_images`, `pending_images`, `completion_rate`, `status`, `created_at`. | Nâng cao |
 | **D6** | Indexing chiến thuật trên Database | Đánh chỉ mục hiệu năng cao (B-Tree trên Supabase PostgreSQL / Index trên MongoDB):<br/>- `created_at desc` (Sắp xếp lịch sử mới nhất)<br/>- `waste_type` (Lọc theo loại rác)<br/>- `pipeline_type` (Lọc theo luồng Tự động / Thủ công)<br/>- `file_name` (Tìm kiếm nhanh theo tên file). | Bắt buộc |
 | **D7** | Xử lý chịu lỗi kết nối (Fault Tolerance) | Triển khai cơ chế retry và graceful degradation: nếu Supabase hoặc Cloudinary mất kết nối tạm thời, API trả mã lỗi rõ ràng mà không làm gián đoạn toàn bộ tiến trình ứng dụng. | Nâng cao |
@@ -319,16 +299,19 @@ TRASH_CLASSIFICATION_SYSTEM/
   "image_url": "https://res.cloudinary.com/dxyzt123/image/upload/v1794820000/trash_classification/uploads/single/2026/11/16/c1f7b0a8_plastic_bottle_01.jpg",
   "xai_overlay_url": "https://res.cloudinary.com/dxyzt123/image/upload/v1794820000/trash_classification/uploads/xai/2026/11/16/c1f7b0a8_gradcam_overlay.jpg",
   "waste_type": "Nhựa",
-  "confidence": 96.5,
-  "margin": 91.8,
-  "checkpoint_1": 94.2,
-  "checkpoint_2": 91.8,
-  "composite_score": 102.4,
+  "confidence": 90.0,
+  "margin": 85.0,
+  "checkpoint_1": 75.64,
+  "checkpoint_2": 54.34,
+  "confidence_gate_passed": true,
+  "margin_gate_passed": true,
+  "composite_score": 137.7036,
   "tta_stability": 100.0,
   "decision_tier": "Tier 1: Đạt chuẩn cơ sở",
+  "decision": "Tu_Dong_Gap",
   "pipeline_type": "Tự động",
   "status": "Thành công",
-  "reason": "Đạt chuẩn cơ sở 5-View TTA (Chốt 1: 1.02x | Chốt 2: 1.00x)",
+  "reason": "Đạt cả hai chốt (Chốt 1: 1.19x | Chốt 2: 1.56x).",
   "suggestion": "Thu gom vào thùng rác tái chế.",
   "created_at": "2026-11-16T08:32:15.000Z",
   "metadata": {
@@ -347,10 +330,10 @@ TRASH_CLASSIFICATION_SYSTEM/
 | # | Yêu cầu | Chi tiết kỹ thuật & Giao diện tham chiếu | Mức độ |
 |---|---|---|---|
 | **F1** | Sidebar điều hướng cố định | Bố trí thanh Sidebar nền xanh navy đậm cố định bên trái, logo thùng rác + text "Phân loại rác", menu gồm 2 mục: **Phân loại** (Icon layers) và **Lịch sử** (Icon đồng hồ). Hiển thị rõ mục đang được chọn. | Bắt buộc |
-| **F2** | Màn hình Phân loại 1 ảnh (Tab "Một ảnh") | **Giao diện tham chiếu:** [Giao diện/Phân loại 1 ảnh.png](./Giao%20diện/Phân%20loại%201%20ảnh.png)<br/>- Khối bên trái: Vùng kéo thả ảnh / chọn tệp, xem trước ảnh đã chọn + tên file, nút `[▶ Bắt đầu dự đoán]` và nút `[↺ Làm mới]`.<br/>- Khối bên phải: Card Loại rác kèm badge trạng thái (`✓ Kết quả hợp lệ` hoặc `⚠ Cần kiểm tra`), 3 thanh progress bar (`Độ tin cậy %`, `Chốt 1 %`, `Chốt 2 %`), khung Gợi ý xử lý và **Nút chuyển đổi xem ảnh giải thích XAI Grad-CAM Overlay** (`[Ảnh gốc]` / `[Bản đồ nhiệt Grad-CAM]`). | Bắt buộc |
-| **F3** | Màn hình Phân loại thư mục / nhiều ảnh (Tab "Nhiều ảnh") | **Giao diện tham chiếu:** [Giao diện/Phân loại thư mục nhiều ảnh.png](./Giao%20diện/Phân%20loại%20thư%20mục%20nhiều%20ảnh.png)<br/>- Khối trên trái: Kéo thả nhiều ảnh hoặc thư mục, 2 nút `[Chọn nhiều ảnh]` và `[Chọn thư mục]`.<br/>- Khối trên phải: 4 thẻ thống kê tiến độ (*Tổng số ảnh*, *Đã xử lý*, *Đang chờ*, *Tỷ lệ hoàn thành %*), thanh Progress Bar tổng thể và nút `[▶ Bắt đầu xử lý]`.<br/>- Khối dưới: Bảng kết quả đã xử lý (Thumbnail + Tên ảnh, Loại rác, Độ tin cậy, Chốt 1, Chốt 2, Trạng thái), thanh tìm kiếm tên ảnh, bộ lọc theo loại rác; hỗ trợ nhấn vào dòng để xem chi tiết. | Bắt buộc |
+| **F2** | Màn hình Phân loại 1 ảnh (Tab "Một ảnh") | **Giao diện tham chiếu:** [Giao diện/Phân loại 1 ảnh.png](./Giao%20diện/Phân%20loại%201%20ảnh.png)<br/>- Khối bên trái: Vùng kéo thả ảnh / chọn tệp, xem trước ảnh đã chọn + tên file, nút `[▶ Bắt đầu dự đoán]` và nút `[↺ Làm mới]`.<br/>- Khối bên phải: Card Loại rác kèm badge trạng thái (`✓ Kết quả hợp lệ` hoặc `⚠ Cần kiểm tra`), luồng `Tự động`/`Thủ công` và hai thanh **Độ tin cậy** và **Biên khoảng cách** theo dạng `giá trị % (ngưỡng %)`, khung Gợi ý xử lý và **Nút chuyển đổi xem ảnh giải thích XAI Grad-CAM Overlay** (`[Ảnh gốc]` / `[Bản đồ nhiệt Grad-CAM]`). | Bắt buộc |
+| **F3** | Màn hình Phân loại thư mục / nhiều ảnh (Tab "Nhiều ảnh") | **Giao diện tham chiếu:** [Giao diện/Phân loại thư mục nhiều ảnh.png](./Giao%20diện/Phân%20loại%20thư%20mục%20nhiều%20ảnh.png)<br/>- Khối trên trái: Kéo thả nhiều ảnh hoặc thư mục, 2 nút `[Chọn nhiều ảnh]` và `[Chọn thư mục]`.<br/>- Khối trên phải: 4 thẻ thống kê tiến độ (*Tổng số ảnh*, *Đã xử lý*, *Đang chờ*, *Tỷ lệ hoàn thành %*), thanh Progress Bar tổng thể và nút `[▶ Bắt đầu xử lý]`.<br/>- Khối dưới: Bảng kết quả đã xử lý (Thumbnail + Tên ảnh, Loại rác, Độ tin cậy và Biên khoảng cách theo dạng `giá trị % (ngưỡng %)`, Luồng xử lý), thanh tìm kiếm tên ảnh, bộ lọc theo loại rác; hỗ trợ nhấn vào dòng để xem chi tiết. | Bắt buộc |
 | **F4** | Màn hình Lịch sử phân loại (Tổng quan) | **Giao diện tham chiếu:** [Giao diện/Lịch sử trước khi chọn 1 dòng.png](./Giao%20diện/Lịch%20sử%20trước%20khi%20chọn%201%20dòng.png)<br/>- Thanh bộ lọc: Ô tìm kiếm tên file, dropdown Loại rác, dropdown Luồng xử lý (`Tất cả`/`Tự động`/`Thủ công`), dropdown Thời gian và nút `[📥 Xuất lịch sử]`.<br/>- Bảng dữ liệu: STT, Tên file, Loại rác, Độ tin cậy, Luồng xử lý (Badge màu), Thời gian dự đoán.<br/>- Phân trang: Hiển thị số lượng bản ghi và các nút chuyển trang `[<] [1] [2] ... [>]`. | Bắt buộc |
-| **F5** | Màn hình Lịch sử hiển thị chi tiết 1 dòng (Split View) | **Giao diện tham chiếu:** [Giao diện/Lịch sử hiển thị thông tin chi tiết 1 dòng.png](./Giao%20diện/Lịch%20sử%20hiển%20thị%20thông%20tin%20chi%20tiết%201%20dòng.png)<br/>- Khi người dùng click chọn 1 dòng trong bảng lịch sử: Giao diện chuyển sang dạng Split View.<br/>- Cột trái: Bảng lịch sử co lại, dòng chọn được highlight.<br/>- Cột phải: Panel "Chi tiết dự đoán" hiển thị ảnh kích thước lớn load trực tiếp từ Cloudinary / R2 (kèm nút toggle xem ảnh phủ nhiệt XAI Grad-CAM), tên file, badge loại rác, độ tin cậy %, badge luồng xử lý và ngày giờ dự đoán. | Bắt buộc |
+| **F5** | Cửa sổ chi tiết lịch sử | Bấm một dòng để mở cửa sổ **Chi tiết dự đoán**. Cửa sổ hiển thị ảnh gốc, Grad-CAM, Spatial Energy, tên tệp, loại rác, độ tin cậy và biên khoảng cách theo dạng `giá trị % (ngưỡng %)`, luồng xử lý và thời gian dự đoán. | Bắt buộc |
 | **F6** | Trạng thái tải (Loading state) & Thanh tiến trình | Hiển thị skeleton/spinner khi đang chờ API dự đoán 1 ảnh; cập nhật thanh tiến trình % theo thời gian thực khi xử lý batch nhiều ảnh. | Bắt buộc |
 | **F7** | Bắt lỗi & Thông báo (Toast Notification) | Thông báo lỗi thân thiện khi API quá tải, mất mạng hoặc file upload sai định dạng; thông báo thành công khi xuất lịch sử hoàn tất. | Bắt buộc |
 | **F8** | Thiết kế Responsive | Tương thích và hiển thị tốt trên các độ phân giải màn hình từ Desktop đến Laptop/Tablet. | Bắt buộc |
@@ -394,9 +377,9 @@ Dự án áp dụng mô hình **Monorepo** chuẩn hóa với **1 GitHub reposit
 - **Swagger UI (Interactive API Docs):** `https://trash-classification-api.onrender.com/docs`
 
 ### 4.3. Kịch bản Demo thực nghiệm
-1. **Demo Phân loại 1 ảnh:** Tải 1 ảnh rác thải $\rightarrow$ Xem kết quả hiển thị gồm Loại rác, 3 thanh tiến trình (% tin cậy, Chốt 1, Chốt 2), badge trạng thái và gợi ý xử lý.
+1. **Demo Phân loại 1 ảnh:** Tải một ảnh rác rồi kiểm tra loại rác, hai thanh **Độ tin cậy** và **Biên khoảng cách** có ngưỡng trong ngoặc, luồng xử lý, trạng thái và gợi ý.
 2. **Demo Phân loại theo thư mục:** Chọn một thư mục nhiều ảnh rác $\rightarrow$ Quan sát thanh tiến trình chạy và danh sách ảnh được xử lý đổ vào bảng dữ liệu.
-3. **Demo Tra cứu Lịch sử:** Lọc dữ liệu theo loại rác hoặc luồng xử lý $\rightarrow$ Click vào 1 dòng để xem panel chi tiết bên phải (hình ảnh load từ Cloudinary / R2) $\rightarrow$ Nhấn nút *Xuất lịch sử* để tải file CSV.
+3. **Demo Tra cứu Lịch sử:** Lọc dữ liệu theo loại rác hoặc luồng xử lý $\rightarrow$ Click vào 1 dòng để xem cửa sổ chi tiết dự đoán (hình ảnh load từ Cloudinary / R2) $\rightarrow$ Nhấn nút *Xuất lịch sử* để tải file CSV.
 
 ---
 
@@ -406,11 +389,11 @@ Dự án áp dụng mô hình **Monorepo** chuẩn hóa với **1 GitHub reposit
 |:---|:---:|:---|
 | **1. ML Model & Hệ thống 2 Chốt & XAI** | **20** | |
 | - Nạp model ConvNeXt-Tiny & Tiền xử lý ảnh ($320 \times 320$ AREA) | 6 | Model chạy suy luận ổn định, output xác suất Softmax chuẩn xác |
-| - Module an toàn 2 Chốt & Quy trình tái thẩm định thích ứng 3 Cấp độ | 7 | Đạt chuẩn thiết kế Cell 10 notebook: tính đúng 2 chốt an toàn ($\tau_{conf}$, $\tau_{margin}$), điểm bù trừ $S_{composite}$, bảo lãnh TTA và phân luồng chuẩn xác theo 3 cấp độ (Hard Gates, Composite Rescue, TTA Consensus Rescue) |
+| - Phân luồng theo hai chốt cơ sở | 7 | Cả hai chốt đạt thì vào luồng Tự động. Một chốt chưa đạt thì vào luồng Thủ công và trả lý do tương ứng. Kiểm thử cả trường hợp từng chốt trượt riêng và cả hai cùng trượt. |
 | - Gợi ý hành động xử lý rác tương ứng loại rác | 3 | Gợi ý đúng loại thùng rác (tái chế, hữu cơ, vô cơ...) |
 | - Trực quan hóa giải thích XAI (Grad-CAM & Spatial Energy) | 4 | Trích xuất thành công bản đồ nhiệt JET Overlay minh bạch hóa nhận diện |
 | **2. Backend API (FastAPI)** | **25** | |
-| - Endpoint `/predict/single` và `/predict/batch` | 10 | Nhận ảnh đơn & danh sách ảnh, xử lý trả kết quả đầy đủ 6 trường cốt lõi |
+| - Endpoint `/predict/single` và `/predict/batch` | 10 | Nhận ảnh đơn & danh sách ảnh, xử lý trả kết quả giá trị đo, ngưỡng, cờ đạt ngưỡng, luồng và trạng thái cho từng ảnh |
 | - Endpoint `/history`, `/history/{id}` và `/history/export` | 8 | Lấy lịch sử có phân trang, xem chi tiết và xuất file CSV thành công |
 | - Pydantic Validation & Health Check `/health` | 4 | Validate định dạng ảnh chặt chẽ, báo trạng thái hệ thống |
 | - CORS & Quản lý Exception tập trung | 3 | Kết nối an toàn, format lỗi chuẩn HTTP |
@@ -418,9 +401,9 @@ Dự án áp dụng mô hình **Monorepo** chuẩn hóa với **1 GitHub reposit
 | - Tích hợp Cloudinary (hoặc R2) lưu trữ hình ảnh (ảnh gốc + ảnh XAI) | 8 | Ảnh upload được đẩy lên Cloudinary CDN, trả về link công khai load nhanh |
 | - Tích hợp Supabase (hoặc MongoDB Atlas) lưu trữ dữ liệu lịch sử | 7 | Lưu đầy đủ các trường yêu cầu, index chạy mượt khi tìm kiếm/phân trang |
 | **4. Frontend (Next.js 14+)** | **25** | |
-| - Màn hình Phân loại 1 ảnh (Tab "Một ảnh") | 6 | Khớp chính xác thiết kế: Dropzone, Preview, Card kết quả, 3 Progress bar |
+| - Màn hình Phân loại 1 ảnh (Tab "Một ảnh") | 6 | Khớp chính xác thiết kế: Dropzone, Preview, Card kết quả, hai thanh chỉ số hiển thị phần trăm kèm ngưỡng |
 | - Màn hình Phân loại thư mục (Tab "Nhiều ảnh") | 6 | Khớp chính xác: 4 thẻ tiến độ, progress bar, bảng kết quả có tìm kiếm & lọc |
-| - Màn hình Lịch sử & Split View xem chi tiết | 7 | Khớp chính xác: Filter bar, bảng phân trang, click dòng mở panel ảnh lớn |
+| - Màn hình Lịch sử và cửa sổ chi tiết | 7 | Lọc và phân trang được. Bấm một dòng mở cửa sổ chi tiết với ảnh, hai chỉ số kèm ngưỡng và luồng xử lý. |
 | - Trực quan hóa XAI Heatmap Viewer | 3 | Nút chuyển đổi xem ảnh gốc và ảnh Grad-CAM Overlay trực quan |
 | - UI/UX, Sidebar cố định & Responsive | 3 | Giao diện đồng bộ tông xanh navy, hiệu ứng mượt mà |
 | **5. Triển khai Cloud & Code Quality** | **15** | |
@@ -441,8 +424,8 @@ Dự án áp dụng mô hình **Monorepo** chuẩn hóa với **1 GitHub reposit
 │ **Giai đoạn 1**     │ • Tạo tài khoản Cloudinary & Project     │ • Module Cloudinary & │
 │ *(Ngày 1 - 2)*      │   Supabase (kèm bảng SQL).               │   Supabase Adapter    │
 │                     │ • Đóng gói hàm suy luận ConvNeXt-Tiny.   │ • Module Model Loader │
-│                     │ • Viết thuật toán 2 Chốt chặn & Quy trình│ • Module An toàn      │
-│                     │   tái thẩm định thích ứng 3 Cấp độ.      │   3 Cấp độ Thích ứng  │
+│                     │ • Triển khai hai chốt cơ sở để phân luồng│ • Module Hai Chốt    │
+│                     │   Tự động / Thủ công theo ngưỡng.        │                       │
 ├─────────────────────┼──────────────────────────────────────────┼───────────────────────┤
 │ **Giai đoạn 2**     │ • Khởi tạo FastAPI App, Pydantic schemas.│ • Hoàn thiện Backend  │
 │ *(Ngày 3 - 4)*      │ • Xây dựng API `/predict/single` và      │   FastAPI với đầy đủ  │
@@ -453,7 +436,7 @@ Dự án áp dụng mô hình **Monorepo** chuẩn hóa với **1 GitHub reposit
 │ **Giai đoạn 3**     │ • Khởi tạo Next.js 14, Tailwind CSS.     │ • Giao diện hoàn chỉnh│
 │ *(Ngày 5 - 7)*      │ • Dựng Sidebar xanh navy cố định.        │   khớp 4 ảnh mẫu      │
 │                     │ • Dựng Tab 1 ảnh & Tab Nhiều ảnh.        │ • Kết nối Axios API   │
-│                     │ • Dựng Trang Lịch sử & Split View xem    │                       │
+│                     │ • Dựng Trang Lịch sử và cửa sổ xem       │                       │
 │                     │   chi tiết kết quả ảnh từ Cloudinary.    │                       │
 ├─────────────────────┼──────────────────────────────────────────┼───────────────────────┤
 │ **Giai đoạn 4**     │ • Tích hợp End-to-End Frontend - Backend.│ • Hệ thống Production │
@@ -737,6 +720,7 @@ Mở rộng mục **Environment Variables** và cấu hình:
 | Dịch vụ | Biến môi trường (.env) | Nguồn lấy giá trị | Mục đích sử dụng |
 |:---|:---|:---|:---|
 | **Vercel (FE)** | `NEXT_PUBLIC_API_URL` | Lấy từ URL Render Backend | Để Axios/Fetch ở Frontend biết địa chỉ gọi API |
+| **Render (BE)** | `ADAPTIVE_ASSESSMENT_ENABLED` | `false` | Áp dụng hai chốt cơ sở để phân luồng |
 | **Render (BE)** | `CORS_ORIGINS` | Lấy từ URL Vercel Frontend | Cho phép trình duyệt gọi API từ domain Vercel |
 | **Render (BE)** | `SUPABASE_URL` | Lấy từ Supabase Project Settings > API | Kết nối lưu và đọc kết quả phân loại từ PostgreSQL |
 | **Render (BE)** | `SUPABASE_KEY` | Lấy từ Supabase Project API keys (anon public) | Khóa xác thực an toàn gọi Supabase REST API |
@@ -751,7 +735,7 @@ Mở rộng mục **Environment Variables** và cấu hình:
    - Kéo thả 1 bức ảnh rác thải (ví dụ: chai nhựa `plastic_bottle_01.jpg`).
    - Nhấn **Bắt đầu dự đoán**.
    - Quan sát DevTools (F12) $\rightarrow$ Tab Network: Request gửi đến `...onrender.com/api/v1/predict/single` trả về mã `200 OK`.
-   - Kiểm tra giao diện: Hiển thị đúng ảnh preview, thẻ kết quả *Loại rác: Nhựa*, 3 thanh progress bar và badge *Kết quả hợp lệ*.
+   - Kiểm tra ảnh xem trước, hai chỉ số theo dạng `giá trị % (ngưỡng %)` và luồng xử lý. Ảnh đạt cả hai chốt phải vào `Tự động`. Ảnh trượt ít nhất một chốt phải vào `Thủ công`.
 3. **Kiểm tra Cloudinary Storage:**
    - Chuột phải vào ảnh kết quả hoặc ảnh nhiệt XAI $\rightarrow$ Chọn *Open image in new tab*.
    - Địa chỉ ảnh có tiền tố `https://res.cloudinary.com/...` $\rightarrow$ Ảnh đã được lưu và phân phối thành công qua CDN Cloudinary.
@@ -760,7 +744,7 @@ Mở rộng mục **Environment Variables** và cấu hình:
    - Bản ghi mới nhất xuất hiện với đầy đủ các trường: `id`, `file_name`, `image_url`, `waste_type`, `confidence`, `checkpoint_1`, `checkpoint_2`, `pipeline_type`, `status`.
 5. **Kiểm tra Trang Lịch sử:**
    - Nhấn vào menu **Lịch sử** trên sidebar Frontend.
-   - Bản ghi vừa dự đoán hiển thị đầu bảng. Nhấp vào dòng đó $\rightarrow$ Panel chi tiết bên phải mở ra hiển thị ảnh từ Cloudinary và thông tin chính xác.
+   - Bản ghi vừa dự đoán hiển thị đầu bảng. Nhấp vào dòng đó $\rightarrow$ cửa sổ chi tiết mở ra với ảnh, giá trị hai chốt, các ngưỡng và luồng đã lưu.
 
 ---
 

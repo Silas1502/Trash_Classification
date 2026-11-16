@@ -10,12 +10,18 @@ import gradio as gr
 import spaces
 from app.main import create_app
 
-# ZeroGPU quét hàm này khi khởi động và yêu cầu demo.queue()
+# 1. Hàm GPU cho ZeroGPU cấp phát tài nguyên
 @spaces.GPU
 def check_status(dummy: str = "ping") -> str:
     return "Trash Classification Backend is Online & Ready with ZeroGPU!"
 
-# Giao diện Gradio Interface để ZeroGPU supervisor nhận diện 100%
+# 2. Khởi tạo FastAPI app
+fastapi_app = create_app()
+
+# Đăng ký trực tiếp hàm có @spaces.GPU vào router của FastAPI
+fastapi_app.add_api_route("/spaces-check", check_status, methods=["GET"])
+
+# 3. Giao diện Gradio Interface
 demo = gr.Interface(
     fn=check_status,
     inputs=gr.Textbox(label="API Status Check", value="ping"),
@@ -25,8 +31,7 @@ demo = gr.Interface(
 )
 demo.queue()
 
-# Khởi tạo FastAPI app và gắn Gradio
-fastapi_app = create_app()
+# Gắn Gradio lên FastAPI app
 app = gr.mount_gradio_app(fastapi_app, demo, path="/")
 
 if __name__ == "__main__":

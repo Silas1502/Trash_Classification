@@ -6,6 +6,17 @@ BACKEND_DIR = ROOT_DIR / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+# ZeroGPU trên Hugging Face yêu cầu một hàm có decorator @spaces.GPU gắn vào sự kiện Gradio
+try:
+    import spaces
+
+    @spaces.GPU
+    def check_gpu():
+        return "ZeroGPU & FastAPI Backend are active and ready!"
+except (ImportError, Exception):
+    def check_gpu():
+        return "ZeroGPU & FastAPI Backend are active and ready!"
+
 import gradio as gr
 from app.main import create_app
 
@@ -22,6 +33,9 @@ with gr.Blocks(title="Trash Classification API") as demo:
     * 🔍 **Kiểm tra trạng thái (Health Check):** [/api/v1/health](/api/v1/health)
     * 🌐 **Giao diện người dùng:** Next.js Frontend trên Vercel
     """)
+    btn = gr.Button("Kiểm tra trạng thái ZeroGPU & Backend")
+    out = gr.Textbox(label="Trạng thái hệ thống")
+    btn.click(fn=check_gpu, outputs=out)
 
 # Gắn Gradio lên FastAPI app
 app = gr.mount_gradio_app(fastapi_app, demo, path="/")

@@ -7,7 +7,7 @@ import shutil
 import sys
 from tempfile import TemporaryDirectory
 from threading import Event, Lock, Thread
-from time import perf_counter
+from time import perf_counter, sleep
 from zipfile import BadZipFile, ZipFile
 
 
@@ -27,7 +27,24 @@ def read_counter(path):
         return None
 
 
-def memory_budget(root=CGROUP_ROOT, proc_cgroup=Path("/proc/self/cgroup")):
+def read_key_values(path):
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return {}
+    values = {}
+    for line in lines:
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                values[parts[0].rstrip(":")] = int(parts[1])
+            except ValueError:
+                continue
+    return values
+
+
+def memory_snapshot(root=CGROUP_ROOT, proc_cgroup=Path("/proc/self/cgroup"),
+                    proc_status=Path("/proc/self/status")):
     try:
         memberships = [line.split(":", 2) for line in proc_cgroup.read_text().splitlines()]
     except OSError:
@@ -52,27 +69,53 @@ def memory_budget(root=CGROUP_ROOT, proc_cgroup=Path("/proc/self/cgroup")):
             limit = read_counter(parent / limit_file)
             used = read_counter(parent / used_file)
             if limit is not None and 0 < limit < UNLIMITED and used is not None and used >= 0:
-                readings.append((limit, used))
+                readings.append((limit, used, parent, controllers))
 
     if not readings:
         return None
-    limit, used = min(readings, key=lambda value: value[0])
-    headroom = max(0, min(capacity - usage for capacity, usage in readings))
-    return limit, used, headroom
+    # Read the breakdown from the same cgroup as the reported limit and usage.
+    limit, used, directory, controllers = min(readings, key=lambda value: value[0])
+    headroom = max(0, min(capacity - usage for capacity, usage, *_ in readings))
+    stats = read_key_values(directory / "memory.stat")
+    events = read_key_values(directory / "memory.events")
+    status = read_key_values(proc_status)
+    if controllers == "memory":
+        anonymous = stats.get("total_rss", stats.get("rss"))
+        file_cache = stats.get("total_cache", stats.get("cache"))
+        inactive_file = stats.get("total_inactive_file", stats.get("inactive_file"))
+        events = read_key_values(directory / "memory.oom_control")
+    else:
+        anonymous = stats.get("anon")
+        file_cache = stats.get("file")
+        inactive_file = stats.get("inactive_file")
+    return {
+        "limit": limit,
+        "used": used,
+        "free": headroom,
+        "python_rss": status["VmRSS"] * 1024 if "VmRSS" in status else None,
+        "anonymous": anonymous,
+        "file_cache": file_cache,
+        "inactive_file": inactive_file,
+        "oom_kill": events.get("oom_kill"),
+    }
+
+
+def memory_budget(root=CGROUP_ROOT, proc_cgroup=Path("/proc/self/cgroup")):
+    reading = memory_snapshot(root, proc_cgroup)
+    if reading is None:
+        return None
+    return reading["limit"], reading["used"], reading["free"]
 
 
 @contextmanager
 def track_memory():
-    used_samples = []
-    free_samples = []
+    samples = []
     stop = Event()
 
     def sample():
-        reading = memory_budget()
+        reading = memory_snapshot()
         if reading is not None:
-            _, used, free = reading
-            used_samples.append(used)
-            free_samples.append(free)
+            samples.append(reading)
 
     def watch():
         while not stop.wait(0.1):
@@ -82,7 +125,7 @@ def track_memory():
     thread = Thread(target=watch, daemon=True)
     thread.start()
     try:
-        yield used_samples, free_samples
+        yield samples
     finally:
         stop.set()
         thread.join()
@@ -90,14 +133,37 @@ def track_memory():
 
 
 def report_group(stage, seconds, memory, count):
-    used, free = memory
+    used = [sample["used"] for sample in memory]
+    free = [sample["free"] for sample in memory]
+    python_rss = [sample["python_rss"] for sample in memory if sample["python_rss"] is not None]
     return {
         "Bước": stage,
         "Ảnh hoàn tất": count,
         "Thời gian (giây)": round(seconds, 2),
         "RAM đỉnh (GiB)": round(max(used) / GIB, 3) if used else None,
         "RAM trống thấp nhất (GiB)": round(min(free) / GIB, 3) if free else None,
+        "Python RSS đỉnh (GiB)": round(max(python_rss) / GIB, 3) if python_rss else None,
     }
+
+
+def report_snapshot(stage):
+    reading = memory_snapshot()
+    if reading is None:
+        return {"Mốc đo": stage}
+    labels = {
+        "used": "Toàn container (GiB)",
+        "python_rss": "Python RSS (GiB)",
+        "anonymous": "Anonymous container (GiB)",
+        "file_cache": "Cache tệp container (GiB)",
+        "inactive_file": "Cache tệp inactive (GiB)",
+        "free": "RAM trống (GiB)",
+    }
+    row = {"Mốc đo": stage}
+    for key, label in labels.items():
+        value = reading[key]
+        row[label] = round(value / GIB, 3) if value is not None else None
+    row["OOM kill lũy kế"] = reading["oom_kill"]
+    return row
 
 
 def run_benchmark(checkpoint_file, image_zip, update_progress):
@@ -130,6 +196,7 @@ def run_benchmark(checkpoint_file, image_zip, update_progress):
         with checkpoint.open("wb") as target:
             shutil.copyfileobj(checkpoint_file, target, length=MIB)
 
+        snapshots = [report_snapshot("Trước khi nạp mô hình")]
         started = perf_counter()
         with track_memory() as memory:
             from app.core.config import Settings
@@ -148,6 +215,7 @@ def run_benchmark(checkpoint_file, image_zip, update_progress):
                 raise RuntimeError("Không nạp được checkpoint dự đoán.")
             processor = ImagePreprocessor(settings.max_image_pixels, settings.smart_crop)
         report = [report_group("Nạp TensorFlow và mô hình", perf_counter() - started, memory, 0)]
+        snapshots.append(report_snapshot("Sau khi nạp mô hình"))
 
         for start in range(0, IMAGE_COUNT, GROUP_SIZE):
             group = entries[start:start + GROUP_SIZE]
@@ -165,13 +233,22 @@ def run_benchmark(checkpoint_file, image_zip, update_progress):
                             decoded.verify()
                     update_progress(index + 1)
             report.append(report_group(f"Lượt {start // GROUP_SIZE + 1}", perf_counter() - started, memory, len(group)))
-        return report
+            snapshots.append(report_snapshot(f"Sau lượt {start // GROUP_SIZE + 1}"))
+
+        # Keep the model resident while observing normal post-inference memory.
+        del image, result, overlay
+        idle_started = perf_counter()
+        for elapsed in (0, 15, 30):
+            sleep(max(0, elapsed - (perf_counter() - idle_started)))
+            update_progress(IMAGE_COUNT, f"Đã xong 20 ảnh, đang đo RAM sau xử lý ({elapsed}/30 giây)")
+            snapshots.append(report_snapshot(f"Nghỉ {elapsed} giây, còn giữ mô hình"))
+        return {"groups": report, "snapshots": snapshots}
 
 
 def main():
     import streamlit as st
 
-    st.set_page_config(page_title="Đo RAM Streamlit")
+    st.set_page_config(page_title="Đo RAM Streamlit", layout="wide")
     st.title("Đo RAM Streamlit")
     st.button("Đo lại")
     reading = memory_budget()
@@ -186,9 +263,17 @@ def main():
         strict=True,
     ):
         column.metric(label, f"{value / GIB:.2f} GiB")
-    st.caption("Ứng dụng chỉ đọc số liệu bộ nhớ của container Linux.")
+    st.caption("RAM toàn container bao gồm tiến trình Python và bộ nhớ đệm của Linux.")
+    st.table([report_snapshot("Hiện tại")])
+    st.caption(
+        "Python RSS là bộ nhớ vật lý của tiến trình chạy app. Cache tệp và anonymous là số liệu "
+        "của toàn container. Các cột có phần giao nhau, không cộng chúng lại. "
+        "Cache inactive không phải cam kết lượng RAM có thể cấp phát. "
+        "OOM kill là số tiến trình đã bị hệ điều hành dừng vì thiếu bộ nhớ."
+    )
 
     st.header("Kiểm thử 20 ảnh")
+    st.caption("Sau khi xử lý đủ 20 ảnh, app tự theo dõi RAM thêm 30 giây khi vẫn giữ mô hình.")
     checkpoint_file = st.file_uploader("Checkpoint dự đoán", type="keras")
     image_zip = st.file_uploader("ZIP gồm 20 ảnh mẫu", type="zip")
 
@@ -202,21 +287,30 @@ def main():
             st.warning("Đang có một lượt kiểm thử chạy.")
         else:
             progress = st.progress(0, text="Đang nạp mô hình")
-            st.session_state.pop("benchmark_report", None)
+            st.session_state.pop("benchmark_memory_report", None)
             try:
-                st.session_state.benchmark_report = run_benchmark(
+                st.session_state.benchmark_memory_report = run_benchmark(
                     checkpoint_file,
                     image_zip,
-                    lambda done: progress.progress(done / IMAGE_COUNT, text=f"Đã kiểm tra {done}/{IMAGE_COUNT} ảnh"),
+                    lambda done, text=None: progress.progress(
+                        done / IMAGE_COUNT, text=text or f"Đã kiểm tra {done}/{IMAGE_COUNT} ảnh",
+                    ),
                 )
             except (BadZipFile, OSError, RuntimeError, ValueError) as error:
                 st.error(str(error))
             finally:
                 lock.release()
 
-    if report := st.session_state.get("benchmark_report"):
+    if report := st.session_state.get("benchmark_memory_report"):
         st.success("20/20 ảnh có cả Grad-CAM và Spatial Energy.")
-        st.table(report)
+        st.subheader("Thời gian và RAM đỉnh")
+        st.table(report["groups"])
+        st.subheader("Bộ nhớ tại từng mốc")
+        st.table(report["snapshots"])
+        st.caption(
+            "Số đo được lấy khoảng mỗi 0,1 giây. Ba dòng cuối ghi nhận sau xử lý khi mô hình "
+            "vẫn ở trong RAM. Một lượt thử cho thấy xu hướng trong lượt đó, chưa kết luận được rò rỉ bộ nhớ."
+        )
 
 
 if __name__ == "__main__":

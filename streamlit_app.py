@@ -1,5 +1,7 @@
 from contextlib import contextmanager
+import gc
 import hashlib
+import json
 import mimetypes
 import os
 from pathlib import Path
@@ -17,6 +19,7 @@ MIB = 1024**2
 GIB = 1024**3
 GROUP_SIZE = 4
 IMAGE_COUNT = 20
+IDLE_SECONDS = (0, 15, 30)
 CHECKPOINT_SHA256 = "866206ad9084f8feba2d67ccb550ac76965a8ce7316256ec0560a676f7b1e7a8"
 
 
@@ -166,11 +169,7 @@ def report_snapshot(stage):
     return row
 
 
-def run_benchmark(checkpoint_file, image_zip, update_progress):
-    from io import BytesIO
-
-    from PIL import Image
-
+def load_benchmark_resources(checkpoint_file):
     # The standalone cloud branch has app/ beside this script.
     if not Path(__file__).with_name("app").is_dir():
         sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
@@ -179,11 +178,41 @@ def run_benchmark(checkpoint_file, image_zip, update_progress):
     os.environ.setdefault("TF_NUM_INTEROP_THREADS", "1")
 
     checkpoint_file.seek(0)
-    if hashlib.file_digest(checkpoint_file, "sha256").hexdigest() != CHECKPOINT_SHA256:
+    with TemporaryDirectory() as temporary:
+        checkpoint = Path(temporary) / "best_v2_convnext_retrained.keras"
+        with checkpoint.open("wb") as target:
+            shutil.copyfileobj(checkpoint_file, target, length=MIB)
+
+        from app.core.config import Settings
+        from app.core.safety_gate import SafetyFilter
+        from app.ml.model_loader import ModelBundle, load_model
+        from app.ml.preprocessor import ImagePreprocessor
+
+        settings = Settings(
+            _env_file=None, model_path=checkpoint, tta_views="5",
+            adaptive_assessment_enabled=False, smart_crop=False,
+        )
+        safety = SafetyFilter.load(settings.thresholds_path)
+        model = load_model(settings, safety.thresholds.classes.labels)
+        if not isinstance(model, ModelBundle):
+            raise RuntimeError("Không nạp được checkpoint dự đoán.")
+        processor = ImagePreprocessor(settings.max_image_pixels, settings.smart_crop)
+    gc.collect()
+    return model, settings, safety, processor
+
+
+def run_benchmark(checkpoint_file, image_zip, update_progress, get_resources, update_report):
+    from io import BytesIO
+
+    from PIL import Image
+
+    checkpoint_file.seek(0)
+    digest = hashlib.file_digest(checkpoint_file, "sha256").hexdigest()
+    if digest != CHECKPOINT_SHA256:
         raise ValueError("Hãy chọn đúng checkpoint dự đoán 119 MB của dự án.")
     checkpoint_file.seek(0)
     image_zip.seek(0)
-    with TemporaryDirectory() as temporary, ZipFile(image_zip) as archive:
+    with ZipFile(image_zip) as archive:
         entries = [entry for entry in archive.infolist() if not entry.is_dir()]
         mime_types = [mimetypes.guess_type(entry.filename)[0] for entry in entries]
         if len(entries) != IMAGE_COUNT or any(
@@ -192,30 +221,21 @@ def run_benchmark(checkpoint_file, image_zip, update_progress):
         ):
             raise ValueError("ZIP cần chứa đúng 20 ảnh JPG, PNG hoặc WebP, tối đa 8 MiB mỗi ảnh.")
 
-        checkpoint = Path(temporary) / "best_v2_convnext_retrained.keras"
-        with checkpoint.open("wb") as target:
-            shutil.copyfileobj(checkpoint_file, target, length=MIB)
-
-        snapshots = [report_snapshot("Trước khi nạp mô hình")]
+        report = {
+            "groups": [],
+            "snapshots": [report_snapshot("Trước khi lấy mô hình dùng chung")],
+            "completed": 0,
+            "finished": False,
+        }
+        update_report(report)
         started = perf_counter()
         with track_memory() as memory:
-            from app.core.config import Settings
-            from app.core.safety_gate import SafetyFilter
+            model, settings, safety, processor = get_resources(digest, checkpoint_file)
             from app.ml.inference import classify_batch
-            from app.ml.model_loader import ModelBundle, load_model
-            from app.ml.preprocessor import ImagePreprocessor
 
-            settings = Settings(
-                _env_file=None, model_path=checkpoint, tta_views="5",
-                adaptive_assessment_enabled=False, smart_crop=False,
-            )
-            safety = SafetyFilter.load(settings.thresholds_path)
-            model = load_model(settings, safety.thresholds.classes.labels)
-            if not isinstance(model, ModelBundle):
-                raise RuntimeError("Không nạp được checkpoint dự đoán.")
-            processor = ImagePreprocessor(settings.max_image_pixels, settings.smart_crop)
-        report = [report_group("Nạp TensorFlow và mô hình", perf_counter() - started, memory, 0)]
-        snapshots.append(report_snapshot("Sau khi nạp mô hình"))
+        report["groups"].append(report_group("Lấy mô hình dùng chung", perf_counter() - started, memory, 0))
+        report["snapshots"].append(report_snapshot("Sau khi lấy mô hình dùng chung"))
+        update_report(report)
 
         for start in range(0, IMAGE_COUNT, GROUP_SIZE):
             group = entries[start:start + GROUP_SIZE]
@@ -231,18 +251,23 @@ def run_benchmark(checkpoint_file, image_zip, update_progress):
                             if decoded.format != "JPEG" or decoded.size != (320, 320):
                                 raise RuntimeError(f"Ảnh giải thích {index + 1} sai định dạng.")
                             decoded.verify()
+                    del image, result, overlay, decoded
+                    report["completed"] = index + 1
                     update_progress(index + 1)
-            report.append(report_group(f"Lượt {start // GROUP_SIZE + 1}", perf_counter() - started, memory, len(group)))
-            snapshots.append(report_snapshot(f"Sau lượt {start // GROUP_SIZE + 1}"))
+            gc.collect()
+            report["groups"].append(report_group(f"Lượt {start // GROUP_SIZE + 1}", perf_counter() - started, memory, len(group)))
+            report["snapshots"].append(report_snapshot(f"Sau lượt {start // GROUP_SIZE + 1}"))
+            update_report(report)
 
         # Keep the model resident while observing normal post-inference memory.
-        del image, result, overlay
         idle_started = perf_counter()
-        for elapsed in (0, 15, 30):
+        for elapsed in IDLE_SECONDS:
             sleep(max(0, elapsed - (perf_counter() - idle_started)))
             update_progress(IMAGE_COUNT, f"Đã xong 20 ảnh, đang đo RAM sau xử lý ({elapsed}/30 giây)")
-            snapshots.append(report_snapshot(f"Nghỉ {elapsed} giây, còn giữ mô hình"))
-        return {"groups": report, "snapshots": snapshots}
+            report["snapshots"].append(report_snapshot(f"Nghỉ {elapsed} giây, còn giữ mô hình"))
+            update_report(report)
+        report["finished"] = True
+        return report
 
 
 def main():
@@ -274,6 +299,7 @@ def main():
 
     st.header("Kiểm thử 20 ảnh")
     st.caption("Sau khi xử lý đủ 20 ảnh, app tự theo dõi RAM thêm 30 giây khi vẫn giữ mô hình.")
+    st.caption("Mô hình được nạp một lần và dùng chung cho các lần chạy. Mỗi ảnh được giải phóng sau xử lý.")
     checkpoint_file = st.file_uploader("Checkpoint dự đoán", type="keras")
     image_zip = st.file_uploader("ZIP gồm 20 ảnh mẫu", type="zip")
 
@@ -281,7 +307,25 @@ def main():
     def benchmark_lock():
         return Lock()
 
-    if st.button("Chạy 5 lượt", disabled=checkpoint_file is None or image_zip is None):
+    @st.cache_resource(show_spinner=False, max_entries=1)
+    def cached_resources(checkpoint_sha256, _checkpoint_file):
+        return load_benchmark_resources(_checkpoint_file)
+
+    run_requested = st.button("Chạy 5 lượt", disabled=checkpoint_file is None or image_zip is None)
+    groups_placeholder = st.empty()
+    snapshots_placeholder = st.empty()
+
+    def publish_report(report):
+        st.session_state.benchmark_memory_report = report
+        with groups_placeholder.container():
+            st.subheader("Thời gian và RAM đỉnh")
+            st.table(report["groups"])
+        with snapshots_placeholder.container():
+            st.subheader("Bộ nhớ tại từng mốc")
+            st.table(report["snapshots"])
+        print("STREAMLIT_MEMORY " + json.dumps(report, ensure_ascii=False), flush=True)
+
+    if run_requested:
         lock = benchmark_lock()
         if not lock.acquire(blocking=False):
             st.warning("Đang có một lượt kiểm thử chạy.")
@@ -295,6 +339,8 @@ def main():
                     lambda done, text=None: progress.progress(
                         done / IMAGE_COUNT, text=text or f"Đã kiểm tra {done}/{IMAGE_COUNT} ảnh",
                     ),
+                    cached_resources,
+                    publish_report,
                 )
             except (BadZipFile, OSError, RuntimeError, ValueError) as error:
                 st.error(str(error))
@@ -302,11 +348,11 @@ def main():
                 lock.release()
 
     if report := st.session_state.get("benchmark_memory_report"):
-        st.success("20/20 ảnh có cả Grad-CAM và Spatial Energy.")
-        st.subheader("Thời gian và RAM đỉnh")
-        st.table(report["groups"])
-        st.subheader("Bộ nhớ tại từng mốc")
-        st.table(report["snapshots"])
+        if report.get("finished"):
+            st.success("20/20 ảnh có cả Grad-CAM và Spatial Energy.")
+        else:
+            st.info(f"Đã xác nhận {report.get('completed', 0)}/20 ảnh. Bảng bên trên là số liệu đã thu được.")
+        publish_report(report)
         st.caption(
             "Số đo được lấy khoảng mỗi 0,1 giây. Ba dòng cuối ghi nhận sau xử lý khi mô hình "
             "vẫn ở trong RAM. Một lượt thử cho thấy xu hướng trong lượt đó, chưa kết luận được rò rỉ bộ nhớ."

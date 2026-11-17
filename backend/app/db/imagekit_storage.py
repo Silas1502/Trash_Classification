@@ -1,20 +1,14 @@
 import concurrent.futures
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+
 from imagekitio import ImageKit
 
 from app.core.config import Settings
 from app.core.errors import ApiError
+from app.db.storage import ImageObject
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class ImageObject:
-    key: str
-    content: bytes
-    mime_type: str
 
 
 class ImageKitStorage:
@@ -61,4 +55,3 @@ class ImageKitStorage:
             except Exception as exc:
                 logger.warning("ImageKit upload failed: %s", exc)
                 raise ApiError(503, "storage_unavailable", "Không thể lưu ảnh lên ImageKit lúc này.") from exc
-

@@ -12,9 +12,8 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.db.r2_storage import ImageObject
-from app.ml.inference import InferenceResult, classify_batch
-from app.ml.model_loader import DummyPredictor
+from app.db.storage import ImageObject
+from app.ml.types import DummyPredictor, InferenceResult
 from app.ml.preprocessor import IMAGE_TYPES, InvalidImage, PreparedImage
 from app.schemas.history import HistoryItem
 from app.schemas.prediction import BatchError, BatchResult, PredictionMetadata, PredictionResult
@@ -41,25 +40,28 @@ def _file_name(file: UploadFile) -> str:
 
 
 async def _read(file: UploadFile, index: int, settings: Settings) -> ImageInput:
-    mime = (file.content_type or "").lower().split(";", 1)[0].strip()
-    if mime not in MIME_TYPES:
-        raise ApiError(415, "unsupported_image_type", "Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.")
-    limit = settings.max_upload_bytes
-    if file.size is not None and file.size > limit:
-        raise ApiError(413, "image_too_large", f"Ảnh vượt giới hạn {limit:,} byte.")
-    contents = await file.read(limit + 1)
-    if not contents:
-        raise ApiError(400, "empty_image", "Tệp ảnh không có dữ liệu.")
-    if len(contents) > limit:
-        raise ApiError(413, "image_too_large", f"Ảnh vượt giới hạn {limit:,} byte.")
-    return ImageInput(index, _file_name(file), contents, mime)
+    try:
+        mime = (file.content_type or "").lower().split(";", 1)[0].strip()
+        if mime not in MIME_TYPES:
+            raise ApiError(415, "unsupported_image_type", "Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.")
+        limit = settings.max_upload_bytes
+        if file.size is not None and file.size > limit:
+            raise ApiError(413, "image_too_large", f"Ảnh vượt giới hạn {limit:,} byte.")
+        contents = await file.read(limit + 1)
+        if not contents:
+            raise ApiError(400, "empty_image", "Tệp ảnh không có dữ liệu.")
+        if len(contents) > limit:
+            raise ApiError(413, "image_too_large", f"Ảnh vượt giới hạn {limit:,} byte.")
+        return ImageInput(index, _file_name(file), contents, mime)
+    finally:
+        await file.close()
 
 
 def _require_cloud(request: Request) -> None:
     if isinstance(request.app.state.model, DummyPredictor):
         return
     if request.app.state.history is None or request.app.state.storage is None:
-        raise ApiError(503, "cloud_not_configured", "Cần cấu hình Database (Supabase/MongoDB) và Cloud Storage (Cloudinary/R2) để lưu kết quả.")
+        raise ApiError(503, "cloud_not_configured", "Cần cấu hình Supabase Database và ImageKit hoặc Supabase Storage để lưu kết quả.")
 
 
 def _compute(state, inputs: list[ImageInput]):
@@ -76,7 +78,7 @@ def _compute(state, inputs: list[ImageInput]):
             valid.append((source, image))
     if not valid:
         return [], errors
-    predictions = classify_batch(state.model, [image for _, image in valid], state.settings, state.safety)
+    predictions = state.batch_classifier(state.model, [image for _, image in valid], state.settings, state.safety)
     return [(source, image, output) for (source, image), output in zip(valid, predictions, strict=True)], errors
 
 
@@ -122,7 +124,6 @@ async def _persist(state, source: ImageInput, image: PreparedImage, output: Infe
             crop_box=image.crop_box, crop_strategy=image.crop_strategy,
         ),
     )
-    # A Mongo timeout can occur after a committed insert, so keep the R2 objects if the write is ambiguous.
     await state.history.insert(history)
     return result
 
@@ -170,6 +171,11 @@ async def predict_batch(request: Request, files: Annotated[list[UploadFile], Fil
         try:
             async with state.ml_slot:
                 computed, invalid = await run_in_threadpool(_compute, state, inputs)
+        except ApiError as exc:
+            errors.extend(BatchError(
+                index=source.index, file_name=source.file_name, code=exc.code, message=exc.message,
+            ) for source in inputs)
+            continue
         except Exception:
             logger.exception("Batch inference failed")
             errors.extend(BatchError(
@@ -177,8 +183,14 @@ async def predict_batch(request: Request, files: Annotated[list[UploadFile], Fil
                 message="Không thể phân loại ảnh vào lúc này.",
             ) for source in inputs)
             continue
+        finally:
+            inputs.clear()
         errors.extend(invalid)
-        for outcome in await asyncio.gather(*(save(*item) for item in computed)):
+        try:
+            outcomes = await asyncio.gather(*(save(*item) for item in computed))
+        finally:
+            computed.clear()
+        for outcome in outcomes:
             if isinstance(outcome, BatchError):
                 errors.append(outcome)
             else:

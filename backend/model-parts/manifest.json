@@ -1,0 +1,44 @@
+{
+  "format_version": 1,
+  "precision": "float32",
+  "opset": 18,
+  "input_shape": [
+    1,
+    320,
+    320,
+    3
+  ],
+  "tta_views": 5,
+  "labels": [
+    "glass",
+    "metal",
+    "paper",
+    "plastic"
+  ],
+  "checkpoint_sha256": "866206ad9084f8feba2d67ccb550ac76965a8ce7316256ec0560a676f7b1e7a8",
+  "checkpoint_bytes": 119190756,
+  "thresholds_sha256": "e6d09feca9f0377b9611dc513e01cce9e7684668ab94d6206010e95ac0a0b941",
+  "spatial_layer": "convnext_tiny_stage_3_block_2_identity",
+  "converter_lowerings": {
+    "Erfc(x)": "1 - Erf(x)",
+    "RsqrtGrad(y, dy)": "-0.5 * dy * y**3",
+    "grouped Conv2D, groups=channels": "multiplier-one depthwise_conv2d, identical kernel"
+  },
+  "files": {
+    "forward.onnx": {
+      "sha256": "76b525710210baecb6b45989ab3750dc132cbfe8be0c49b342235e60b64a8f15",
+      "bytes": 117770131
+    },
+    "gradient.onnx": {
+      "sha256": "4c05ab3654c32244a5ec45722f5d7f8ac1ee81b398b915b91efe16f0d46986fd",
+      "bytes": 12667086
+    }
+  },
+  "export_versions": {
+    "tensorflow": "2.20.0",
+    "keras": "3.13.2",
+    "tf2onnx": "1.17.0",
+    "onnx": "1.17.0",
+    "numpy": "2.2.6"
+  }
+}

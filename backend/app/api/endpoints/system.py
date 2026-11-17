@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
-from app.ml.model_loader import DummyPredictor, IMAGE_SIZE, SPATIAL_LAYER
+from app.ml.types import DummyPredictor, IMAGE_SIZE, SPATIAL_LAYER
 
 router = APIRouter(tags=["System"])
 

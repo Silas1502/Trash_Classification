@@ -1,22 +1,14 @@
-from dataclasses import dataclass
 from time import perf_counter
 
 import tensorflow as tf
 
 from app.core.config import Settings
-from app.core.safety_gate import SafetyDecision, SafetyFilter
+from app.core.safety_gate import SafetyFilter
 
 from .model_loader import DummyPredictor, ModelBundle
 from .preprocessor import PreparedImage, area_resize, normalize_for_convnext
 from .xai_engine import Explainability, explain_batch
-
-
-@dataclass(frozen=True)
-class InferenceResult:
-    decision: SafetyDecision
-    xai: Explainability | None
-    inference_time_ms: float
-    xai_time_ms: float
+from .types import BatchClassifier, InferenceResult
 
 
 def _probabilities(model: ModelBundle, batch: tf.Tensor, views: int):

@@ -1,0 +1,3 @@
+*.enc -text
+app/core/safety_thresholds.json -text whitespace=cr-at-eol
+start-render.sh text eol=lf

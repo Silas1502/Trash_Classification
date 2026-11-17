@@ -3,41 +3,19 @@ import json
 import logging
 import os
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import urlopen
 from zipfile import ZipFile
 
 import keras
 import numpy as np
-import tensorflow as tf
 
 from app.core.config import Settings
 
 from .custom_layers import CosineDense, L2Normalize
+from .types import DummyPredictor, IMAGE_SIZE, ModelBundle, SPATIAL_LAYER
 
 logger = logging.getLogger(__name__)
-
-IMAGE_SIZE = (320, 320)
-SPATIAL_LAYER = "convnext_tiny_stage_3_block_2_identity"
-
-
-@dataclass(frozen=True)
-class ModelBundle:
-    sub_logits_model: keras.Model
-    spatial: keras.Model
-    head: keras.Model
-    checkpoint: str
-    class_labels: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class DummyPredictor:
-    class_labels: tuple[str, ...]
-
-    def probabilities(self, image_count: int) -> np.ndarray:
-        return np.random.default_rng().dirichlet(np.ones(len(self.class_labels)), size=image_count)
-
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -96,7 +74,7 @@ def _deserialize_checkpoint(path: Path) -> keras.Model:
     custom_objects = {"CosineDense": CosineDense}
     lambda_layers = [layer for layer in config["config"]["layers"] if layer["class_name"] == "Lambda"]
     if not lambda_layers:
-        return tf.keras.models.load_model(path, custom_objects=custom_objects, compile=False, safe_mode=True)
+        return keras.models.load_model(path, custom_objects=custom_objects, compile=False, safe_mode=True)
 
     config["compile_config"] = None
     for layer in lambda_layers:
@@ -131,7 +109,7 @@ def load_model(settings: Settings, class_labels: tuple[str, ...]) -> ModelBundle
     for operation in model.operations:
         # ConvNeXt serializes this as keras.ops.Add, outside model.layers.
         if type(operation).__name__ == "Add":
-            inputs = tf.nest.flatten(operation.input)
+            inputs = keras.tree.flatten(operation.input)
             if len(inputs) == 2 and any(tensor is features for tensor in inputs):
                 residual_inputs = inputs
                 break
@@ -145,9 +123,11 @@ def load_model(settings: Settings, class_labels: tuple[str, ...]) -> ModelBundle
         path.name,
         class_labels,
     )
-    sample = tf.zeros((1, *IMAGE_SIZE, 3), dtype=tf.float32)
-    warmup_logits = bundle.sub_logits_model(sample, training=False)
-    tf.debugging.assert_all_finite(warmup_logits, "Checkpoint produced non-finite logits during warmup.")
-    tf.debugging.assert_near(bundle.head(bundle.spatial(sample, training=False), training=False), warmup_logits)
+    sample = keras.ops.zeros((1, *IMAGE_SIZE, 3), dtype="float32")
+    warmup_logits = keras.ops.convert_to_numpy(bundle.sub_logits_model(sample, training=False))
+    if not np.isfinite(warmup_logits).all():
+        raise ValueError("Checkpoint produced non-finite logits during warmup.")
+    head_logits = keras.ops.convert_to_numpy(bundle.head(bundle.spatial(sample, training=False), training=False))
+    np.testing.assert_allclose(head_logits, warmup_logits, rtol=1e-6, atol=1e-6)
     logger.info("Loaded checkpoint %s with labels %s", bundle.checkpoint, bundle.class_labels)
     return bundle

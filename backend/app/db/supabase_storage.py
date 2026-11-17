@@ -1,20 +1,13 @@
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from supabase import create_client, Client
 
 from app.core.config import Settings
 from app.core.errors import ApiError
+from app.db.storage import ImageObject
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class ImageObject:
-    key: str
-    content: bytes
-    mime_type: str
 
 
 class SupabaseStorage:

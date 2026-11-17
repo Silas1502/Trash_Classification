@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
 from app.core.errors import ApiError
-from app.db.mongodb import MongoHistory
+from app.db.supabase_db import SupabaseHistory
 from app.schemas.history import HistoryFilters, HistoryItem, HistoryPage, HistoryQuery
 
 router = APIRouter(prefix="/history", tags=["History"])
@@ -21,10 +21,10 @@ CSV_COLUMNS = (
 )
 
 
-def get_history(request: Request) -> MongoHistory:
+def get_history(request: Request) -> SupabaseHistory:
     history = request.app.state.history
     if history is None:
-        raise ApiError(503, "database_unavailable", "Chưa cấu hình kết nối MongoDB.")
+        raise ApiError(503, "database_unavailable", "Chưa cấu hình kết nối Supabase.")
     return history
 
 

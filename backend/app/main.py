@@ -17,13 +17,10 @@ from app.api.router import router
 from app.core.config import Settings
 from app.core.errors import ApiError
 from app.core.safety_gate import SafetyFilter
-from app.db.mongodb import MongoHistory
-from app.db.r2_storage import R2Storage
+from app.db.imagekit_storage import ImageKitStorage
 from app.db.supabase_db import SupabaseHistory
 from app.db.supabase_storage import SupabaseStorage
-from app.db.cloudinary_storage import CloudinaryStorage
-from app.db.imagekit_storage import ImageKitStorage
-from app.ml.model_loader import DummyPredictor, load_model
+from app.ml.types import BatchClassifier, DummyPredictor, ModelBundle
 from app.ml.preprocessor import ImagePreprocessor
 
 logger = logging.getLogger(__name__)
@@ -121,7 +118,13 @@ async def _watch_dependencies(app: FastAPI) -> None:
         await asyncio.sleep(state.settings.health_probe_interval_seconds)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *,
+    model: ModelBundle | DummyPredictor | None = None,
+    batch_classifier: BatchClassifier | None = None,
+    model_loader: Callable | None = None,
+    preprocessor_factory: Callable = ImagePreprocessor,
+) -> FastAPI:
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -129,9 +132,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state = app.state
         state.settings = settings
         state.safety = await run_in_threadpool(SafetyFilter.load, settings.thresholds_path)
-        state.model = await run_in_threadpool(load_model, settings, state.safety.thresholds.classes.labels)
+        loader = model_loader
+        if model is None and loader is None:
+            from app.ml.model_loader import load_model
+            loader = load_model
+        state.model = model if model is not None else await run_in_threadpool(
+            loader, settings, state.safety.thresholds.classes.labels,
+        )
+        classifier = batch_classifier
+        if classifier is None:
+            from app.ml.inference import classify_batch
+            classifier = classify_batch
+        state.batch_classifier = classifier
         state.preprocessor = await run_in_threadpool(
-            ImagePreprocessor, settings.max_image_pixels, settings.smart_crop,
+            preprocessor_factory, settings.max_image_pixels, settings.smart_crop,
         )
         state.ml_slot = anyio.Semaphore(1)
         state.prediction_slots = anyio.Semaphore(settings.max_prediction_requests)
@@ -139,26 +153,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         state.history = state.storage = None
 
         async with AsyncExitStack() as cleanup:
-            # 1. Database: Ưu tiên Supabase nếu có cấu hình, ngược lại dùng MongoDB
             if settings.supabase_url and settings.supabase_key:
                 state.history = SupabaseHistory(settings.supabase_url, settings.supabase_key.get_secret_value())
                 cleanup.callback(state.history.close)
-            elif settings.mongodb_uri:
-                state.history = MongoHistory(settings.mongodb_uri.get_secret_value(), settings.mongodb_db_name)
-                cleanup.callback(state.history.close)
 
-            # 2. Storage: Ưu tiên ImageKit nếu có cấu hình, rồi đến Cloudinary / Supabase / R2
             if settings.imagekit_private_key and settings.imagekit_url_endpoint:
                 state.storage = ImageKitStorage(settings)
                 cleanup.callback(state.storage.close)
-            elif settings.cloudinary_cloud_name and settings.cloudinary_api_key:
-                state.storage = CloudinaryStorage(settings)
-                cleanup.callback(state.storage.close)
             elif settings.supabase_url and settings.supabase_key:
                 state.storage = SupabaseStorage(settings)
-                cleanup.callback(state.storage.close)
-            elif settings.r2_account_id:
-                state.storage = R2Storage(settings)
                 cleanup.callback(state.storage.close)
 
             state.health = _health(

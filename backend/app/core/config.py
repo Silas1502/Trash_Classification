@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import Literal
-from urllib.parse import urlsplit
 
 from pydantic import Field, HttpUrl, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,24 +22,12 @@ class Settings(BaseSettings):
     tta_views: Literal["1", "5"] = "5"
     smart_crop: bool = False
 
-    mongodb_uri: SecretStr | None = None
-    mongodb_db_name: str = "trash_classification_db"
     supabase_url: str = ""
     supabase_key: SecretStr | None = None
-
-    r2_account_id: str = Field(default="", pattern=r"^(?:[a-fA-F0-9]{32})?$")
-    r2_access_key_id: SecretStr | None = None
-    r2_secret_access_key: SecretStr | None = None
-    r2_bucket_name: str = "trash-classification-images"
-    r2_public_domain: str = ""
 
     imagekit_public_key: SecretStr | None = None
     imagekit_private_key: SecretStr | None = None
     imagekit_url_endpoint: str = ""
-
-    cloudinary_cloud_name: str = ""
-    cloudinary_api_key: SecretStr | None = None
-    cloudinary_api_secret: SecretStr | None = None
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     max_upload_bytes: int = Field(default=8 * 1024**2, ge=1024, le=32 * 1024**2)
@@ -58,14 +45,6 @@ class Settings(BaseSettings):
             self.model_download_url.scheme != "https" or not self.model_sha256
         ):
             raise ValueError("MODEL_DOWNLOAD_URL yêu cầu HTTPS và MODEL_SHA256.")
-        r2_values = (self.r2_account_id, self.r2_access_key_id, self.r2_secret_access_key, self.r2_public_domain)
-        if any(r2_values) and not all(r2_values):
-            raise ValueError("Cần cấu hình đủ R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY và R2_PUBLIC_DOMAIN.")
-        if self.r2_public_domain:
-            parsed = urlsplit(self.r2_public_domain)
-            if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.path.rstrip("/") or parsed.query or parsed.fragment:
-                raise ValueError("R2_PUBLIC_DOMAIN phải là HTTPS origin của bucket.")
-            self.r2_public_domain = self.r2_public_domain.rstrip("/")
         if self.supabase_url:
             self.supabase_url = self.supabase_url.strip().rstrip("/")
             if self.supabase_url.endswith("/rest/v1"):

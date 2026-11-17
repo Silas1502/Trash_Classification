@@ -1,16 +1,19 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TYPE_CHECKING
 
 import cv2
 import numpy as np
-import tensorflow as tf
 from PIL import Image, ImageOps, UnidentifiedImageError
-from tensorflow.keras.applications.convnext import preprocess_input as preprocess_convnext
 
-from .model_loader import IMAGE_SIZE
+from .types import IMAGE_SIZE
+
+if TYPE_CHECKING:
+    import tensorflow as tf
 
 IMAGE_TYPES = {"JPEG": ("image/jpeg", ".jpg"), "PNG": ("image/png", ".png"), "WEBP": ("image/webp", ".webp")}
 
@@ -49,6 +52,8 @@ def _decode(contents: bytes, claimed_type: str, max_pixels: int) -> tuple[np.nda
 
 
 def area_resize(image: tf.Tensor) -> tf.Tensor:
+    import tensorflow as tf
+
     return tf.image.resize(image, IMAGE_SIZE, method=tf.image.ResizeMethod.AREA, antialias=True)
 
 
@@ -85,6 +90,8 @@ class ImagePreprocessor:
         return (width - side) // 2, (height - side) // 2, side, False
 
     def prepare(self, contents: bytes, claimed_type: str) -> PreparedImage:
+        import tensorflow as tf
+
         rgb, mime_type, extension = _decode(contents, claimed_type, self.max_pixels)
         x, y, side, found = self._square(rgb)
         model_rgb = area_resize(tf.convert_to_tensor(rgb[y:y + side, x:x + side]))
@@ -95,5 +102,8 @@ class ImagePreprocessor:
 
 
 def normalize_for_convnext(image: tf.Tensor) -> tf.Tensor:
+    import tensorflow as tf
+    from tensorflow.keras.applications.convnext import preprocess_input as preprocess_convnext
+
     # Keras ConvNeXt preprocess_input keeps [0, 255]; the checkpoint normalizes in its stem.
     return preprocess_convnext(tf.cast(image, tf.float32))

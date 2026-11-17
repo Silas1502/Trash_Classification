@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -6,14 +5,9 @@ import tensorflow as tf
 
 from .model_loader import IMAGE_SIZE, ModelBundle
 from .preprocessor import PreparedImage, normalize_for_convnext
+from .types import Explainability
 
 ALPHA = 0.48
-
-
-@dataclass(frozen=True)
-class Explainability:
-    gradcam_jpeg: bytes
-    spatial_energy_jpeg: bytes
 
 
 def normalize_map(values: np.ndarray) -> np.ndarray:
@@ -25,12 +19,12 @@ def normalize_map(values: np.ndarray) -> np.ndarray:
     return ((values - lo) / (hi - lo)).astype(np.float32)
 
 
-def _overlay_jpeg(image: PreparedImage, heat: np.ndarray) -> bytes:
+def _overlay_jpeg(rgb: np.ndarray, heat: np.ndarray) -> bytes:
     # Match Cell 12: display the heatmap on the 320×320 RGB model input before normalization.
     heat = cv2.resize(heat, IMAGE_SIZE, interpolation=cv2.INTER_CUBIC)
     heat = np.uint8(np.round(np.clip(heat, 0, 1) * 255))
     jet = cv2.applyColorMap(heat, cv2.COLORMAP_JET)
-    crop = np.clip(image.model_rgb.numpy(), 0, 255).astype(np.uint8)
+    crop = np.clip(rgb, 0, 255).astype(np.uint8)
     base = cv2.cvtColor(crop, cv2.COLOR_RGB2BGR)
     overlay = cv2.addWeighted(base, 1 - ALPHA, jet, ALPHA, 0)
     ok, encoded = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -52,8 +46,16 @@ def explain_batch(model: ModelBundle, images: list[PreparedImage], targets: list
     if gradients is None:
         raise RuntimeError("Classifier logits are disconnected from the spatial layer.")
 
-    features = tf.cast(features, tf.float32).numpy()
-    gradients = tf.cast(gradients, tf.float32).numpy()
+    return render_explanations(
+        [image.model_rgb.numpy() for image in images],
+        tf.cast(features, tf.float32).numpy(),
+        tf.cast(gradients, tf.float32).numpy(),
+    )
+
+
+def render_explanations(
+    images: list[np.ndarray], features: np.ndarray, gradients: np.ndarray,
+) -> list[Explainability]:
     energy = np.sqrt(np.mean(np.square(features), axis=-1))
     weights = gradients.mean(axis=(1, 2))
     cam = np.einsum("bhwc,bc->bhw", features, weights)

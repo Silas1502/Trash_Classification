@@ -8,7 +8,7 @@ Copy-Item .env.example .env
 uvicorn app.main:app --reload
 ```
 
-Swagger ở `http://127.0.0.1:8000/docs`. Cấu hình Supabase, ImageKit và origin của frontend trong `.env` để lưu dự đoán thật và truy vấn lịch sử. Tên file gửi qua multipart là `file` cho dự đoán đơn và `files` (lặp lại cho từng ảnh) cho dự đoán theo lô.
+Swagger ở `http://127.0.0.1:8000/docs`. Điền thông tin Supabase, ImageKit và origin của frontend trong `.env` để lưu dự đoán thật và truy vấn lịch sử. Nếu bỏ cấu hình ImageKit, backend dùng bucket `trash-images` trên Supabase Storage. Tên file gửi qua multipart là `file` cho dự đoán đơn và `files` (lặp lại cho từng ảnh) cho dự đoán theo lô.
 
 Backend ưu tiên `backend/checkpoints/best_v2_convnext_retrained.keras` và cũng nhận checkpoint hiện có trong `checkpoints/convnext_tiny/` ở gốc monorepo. Có thể đặt `MODEL_PATH` thành đường dẫn tuyệt đối hoặc đường dẫn tính từ `backend/`. Khi thiếu file, dự đoán thử trả `is_mock: true` và URL ảnh rỗng (`null`). Kết quả mô phỏng chỉ xuất hiện trong phản hồi HTTP.
 

@@ -33,6 +33,7 @@ export interface PredictionResponse {
   reason: string | null;
   suggestion: string;
   created_at: string;
+  processing_time_ms?: number;
 }
 
 export interface HistoryItem extends PredictionResponse {
@@ -41,6 +42,7 @@ export interface HistoryItem extends PredictionResponse {
     mime_type: string;
     inference_time_ms: number;
     xai_time_ms: number;
+    processing_time_ms?: number | null;
     model_version: string;
     tta_views: 1 | 5;
     crop_box: [number, number, number, number];

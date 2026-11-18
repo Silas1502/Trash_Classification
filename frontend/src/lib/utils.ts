@@ -6,6 +6,14 @@ export function percent(value: number) {
   return value.toFixed(1) + "%";
 }
 
+const durationFormatter = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
+
+export function formatDuration(milliseconds: number) {
+  return milliseconds >= 1000
+    ? durationFormatter.format(milliseconds / 1000) + " giây"
+    : durationFormatter.format(milliseconds) + " ms";
+}
+
 const dateFormatter = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh",
   year: "numeric", month: "2-digit", day: "2-digit",

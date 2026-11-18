@@ -4,6 +4,7 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
+from time import perf_counter
 from typing import Annotated, Literal
 from uuid import uuid4
 
@@ -16,7 +17,7 @@ from app.db.storage import ImageObject
 from app.ml.types import DummyPredictor, InferenceResult
 from app.ml.preprocessor import IMAGE_TYPES, InvalidImage, PreparedImage
 from app.schemas.history import HistoryItem
-from app.schemas.prediction import BatchError, BatchResult, PredictionMetadata, PredictionResult
+from app.schemas.prediction import BatchError, BatchResult, PredictionMetadata, PredictionResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/predict", tags=["Prediction"])
@@ -65,9 +66,10 @@ def _require_cloud(request: Request) -> None:
 
 
 def _compute(state, inputs: list[ImageInput]):
-    valid: list[tuple[ImageInput, PreparedImage]] = []
+    valid: list[tuple[ImageInput, PreparedImage, float]] = []
     errors = []
     for source in inputs:
+        started = perf_counter()
         try:
             image = state.preprocessor.prepare(source.contents, source.mime_type)
         except InvalidImage as exc:
@@ -75,14 +77,21 @@ def _compute(state, inputs: list[ImageInput]):
                 index=source.index, file_name=source.file_name, code="invalid_image", message=str(exc),
             ))
         else:
-            valid.append((source, image))
+            preprocessing_ms = (perf_counter() - started) * 1000
+            valid.append((source, image, preprocessing_ms))
     if not valid:
         return [], errors
-    predictions = state.batch_classifier(state.model, [image for _, image in valid], state.settings, state.safety)
-    return [(source, image, output) for (source, image), output in zip(valid, predictions, strict=True)], errors
+    predictions = state.batch_classifier(state.model, [image for _, image, _ in valid], state.settings, state.safety)
+    computed = [
+        (source, image, output, round(preprocessing_ms + output.inference_time_ms + output.xai_time_ms, 2))
+        for (source, image, preprocessing_ms), output in zip(valid, predictions, strict=True)
+    ]
+    return computed, errors
 
 
-async def _persist(state, source: ImageInput, image: PreparedImage, output: InferenceResult, mode: Mode) -> PredictionResult:
+async def _persist(
+    state, source: ImageInput, image: PreparedImage, output: InferenceResult, processing_time_ms: float, mode: Mode,
+) -> PredictionResponse:
     id = uuid4()
     now = datetime.now(timezone.utc)
     is_mock = isinstance(state.model, DummyPredictor)
@@ -100,7 +109,7 @@ async def _persist(state, source: ImageInput, image: PreparedImage, output: Infe
         async with state.storage_slots:
             original_url, gradcam_url, energy_url = await run_in_threadpool(state.storage.upload_images, objects)
     decision = output.decision
-    result = PredictionResult(
+    result = PredictionResponse(
         id=id, file_name=source.file_name, image_url=original_url, xai_overlay_url=gradcam_url,
         xai_energy_overlay_url=energy_url, waste_type=decision.waste_type,
         confidence=round(decision.confidence * 100, 4), margin=round(decision.margin * 100, 4),
@@ -111,15 +120,16 @@ async def _persist(state, source: ImageInput, image: PreparedImage, output: Infe
         tta_stability=None if decision.tta_stability is None else round(decision.tta_stability * 100, 4),
         decision_tier=decision.decision_tier, decision=decision.decision, reason=decision.reason, is_mock=is_mock,
         pipeline_type=decision.pipeline_type, status=decision.status, suggestion=decision.suggestion,
-        created_at=now,
+        created_at=now, processing_time_ms=processing_time_ms,
     )
     if is_mock:
         return result
     history = HistoryItem(
-        **result.model_dump(),
+        **result.model_dump(exclude={"processing_time_ms"}),
         metadata=PredictionMetadata(
             file_size=len(source.contents), mime_type=image.mime_type,
             inference_time_ms=round(output.inference_time_ms, 2), xai_time_ms=round(output.xai_time_ms, 2),
+            processing_time_ms=processing_time_ms,
             model_version=state.model.checkpoint.removesuffix(".keras"), tta_views=int(state.settings.tta_views),
             crop_box=image.crop_box, crop_strategy=image.crop_strategy,
         ),
@@ -128,8 +138,8 @@ async def _persist(state, source: ImageInput, image: PreparedImage, output: Infe
     return result
 
 
-@router.post("/single", response_model=PredictionResult)
-async def predict_single(request: Request, file: Annotated[UploadFile, File()]) -> PredictionResult:
+@router.post("/single", response_model=PredictionResponse)
+async def predict_single(request: Request, file: Annotated[UploadFile, File()]) -> PredictionResponse:
     state = request.app.state
     source = await _read(file, 0, state.settings)
     _require_cloud(request)
@@ -149,12 +159,12 @@ async def predict_batch(request: Request, files: Annotated[list[UploadFile], Fil
     if sum(file.size or 0 for file in files) > settings.max_batch_bytes:
         raise ApiError(413, "batch_too_large", f"Lô ảnh vượt giới hạn {settings.max_batch_bytes:,} byte.")
     _require_cloud(request)
-    results: list[PredictionResult] = []
+    results: list[PredictionResponse] = []
     errors: list[BatchError] = []
 
-    async def save(source: ImageInput, image: PreparedImage, prediction: InferenceResult):
+    async def save(source: ImageInput, image: PreparedImage, prediction: InferenceResult, processing_time_ms: float):
         try:
-            return await _persist(state, source, image, prediction, "batch")
+            return await _persist(state, source, image, prediction, processing_time_ms, "batch")
         except ApiError as exc:
             return BatchError(index=source.index, file_name=source.file_name, code=exc.code, message=exc.message)
 

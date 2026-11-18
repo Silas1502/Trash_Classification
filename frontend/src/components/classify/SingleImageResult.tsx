@@ -2,6 +2,7 @@ import { ChartNoAxesColumnIncreasing, Layers, Recycle, Target } from "lucide-rea
 import { Empty, Notice, PanelTitle, PipelineBadge, ProgressBar, Skeleton, StatusBadge } from "@/components/ui/Primitives";
 import { PredictionImages } from "@/components/ui/PredictionImages";
 import { formatGateReading, predictionGates } from "@/lib/predictionGates";
+import { formatDuration } from "@/lib/utils";
 import type { PredictionResponse } from "@/types";
 
 export default function SingleImageResult({ result, busy }: { result?: PredictionResponse; busy: boolean }) {
@@ -18,6 +19,9 @@ export default function SingleImageResult({ result, busy }: { result?: Predictio
         <PipelineBadge value={result.pipeline_type} />
         {result.is_mock && <span className="badge tone-amber">Mô phỏng</span>}
       </div>
+      {result.processing_time_ms != null && <div className="pipeline-line">
+        <span>Thời gian xử lý:</span> <strong>{formatDuration(result.processing_time_ms)}</strong>
+      </div>}
       <div className="metrics">
         {predictionGates(result).map(({ label, value, threshold, passed }) => <div className="metric" key={label}>
           <Layers aria-hidden />

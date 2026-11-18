@@ -8,6 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Empty, Notice, PanelTitle, PipelineBadge, SearchInput, Skeleton, WasteBadge } from "@/components/ui/Primitives";
 import { Picture } from "@/components/ui/PredictionImages";
 import { formatGateReading, gateLabels, predictionGates } from "@/lib/predictionGates";
+import { formatDuration } from "@/lib/utils";
 import { wasteTypes, type WasteType } from "@/types";
 
 export default function BatchResultTable({ rows, busy }: { rows: BatchRow[]; busy: boolean }) {
@@ -32,7 +33,11 @@ export default function BatchResultTable({ rows, busy }: { rows: BatchRow[]; bus
     </div>
     <div className="table-frame">
       <table className="data-table batch-table">
-        <thead><tr><th scope="col">Tên ảnh</th><th scope="col">Loại rác</th><th scope="col">{gateLabels.confidence}</th><th scope="col">{gateLabels.margin}</th><th scope="col">Luồng xử lý</th></tr></thead>
+        <thead><tr>
+          <th scope="col">Tên ảnh</th><th scope="col">Loại rác</th>
+          <th scope="col">{gateLabels.confidence}</th><th scope="col">{gateLabels.margin}</th>
+          <th scope="col">Luồng xử lý</th><th scope="col">Thời gian xử lý</th>
+        </tr></thead>
         <tbody>{filtered.map(row => <tr key={row.id} onClick={() => setSelected(row)}>
           <td>
             <div className="file-cell">
@@ -52,7 +57,8 @@ export default function BatchResultTable({ rows, busy }: { rows: BatchRow[]; bus
               <td key={label}>{formatGateReading(value, threshold)}</td>
             ))}
             <td><PipelineBadge value={row.result.pipeline_type} /></td>
-          </> : <><td>—</td><td>—</td><td>—</td><td>—</td></>}
+            <td>{row.result.processing_time_ms == null ? "—" : formatDuration(row.result.processing_time_ms)}</td>
+          </> : <><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></>}
         </tr>)}</tbody>
       </table>
       {!filtered.length && (busy && !rows.length ? <Skeleton rows={3} /> : <Empty icon={List} title={rows.length ? "Không có ảnh khớp bộ lọc" : "Chưa có ảnh đã xử lý"}>

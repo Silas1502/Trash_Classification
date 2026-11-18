@@ -9,6 +9,7 @@ PipelineType = Literal["Tự động", "Thủ công", "Chưa thẩm định"]
 DecisionCode = Literal["Tu_Dong_Gap", "Chuyen_Khay_Thu_Cong", "Khong_Tham_Dinh"]
 PredictionStatus = Literal["Thành công", "Cần kiểm tra", "Chưa thẩm định"]
 Percent = Annotated[float, Field(ge=0, le=100)]
+DurationMs = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
 class PredictionResult(BaseModel):
@@ -36,6 +37,10 @@ class PredictionResult(BaseModel):
     created_at: datetime
 
 
+class PredictionResponse(PredictionResult):
+    processing_time_ms: DurationMs
+
+
 class PredictionMetadata(BaseModel):
     file_size: int
     mime_type: str
@@ -45,6 +50,7 @@ class PredictionMetadata(BaseModel):
     tta_views: Literal[1, 5]
     crop_box: tuple[int, int, int]  # x, y, side in the decoded original
     crop_strategy: Literal["subject_center", "image_center"]
+    processing_time_ms: DurationMs | None = None
 
 
 class BatchError(BaseModel):
@@ -62,5 +68,5 @@ class BatchResult(BaseModel):
     succeeded_images: int
     failed_images: int
     completion_rate: Percent
-    results: list[PredictionResult]
+    results: list[PredictionResponse]
     errors: list[BatchError]

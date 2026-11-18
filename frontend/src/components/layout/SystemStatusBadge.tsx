@@ -5,8 +5,8 @@ import { getHealth } from "@/services/api";
 
 const labels = {
   checking: "Đang kết nối…",
-  ready: "Máy chủ AI: Sẵn sàng",
-  degraded: "Máy chủ AI: Hạn chế",
+  ready: "Hệ thống: Sẵn sàng",
+  degraded: "Hệ thống: Hạn chế",
   offline: "Mất kết nối",
 };
 

@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.core.errors import ApiError
 from app.core.safety_gate import SafetyFilter
 from app.db.imagekit_storage import ImageKitStorage
+from app.db.imagekit_cleanup import watch_imagekit_cleanup
 from app.db.supabase_db import SupabaseHistory
 from app.db.supabase_storage import SupabaseStorage
 from app.ml.types import BatchClassifier, DummyPredictor, ModelBundle
@@ -169,11 +170,23 @@ def create_app(
                 "checking" if state.history else "not_configured",
                 "checking" if state.storage else "not_configured",
             )
+            cleanup_watcher = None
+            if settings.imagekit_cleanup_token:
+                if state.history is None or not isinstance(state.storage, ImageKitStorage):
+                    raise RuntimeError("IMAGEKIT_CLEANUP_TOKEN requires Supabase and ImageKit configuration")
+                cleanup_watcher = asyncio.create_task(watch_imagekit_cleanup(
+                    state.history, state.storage, settings.imagekit_cleanup_token.get_secret_value(),
+                    settings.imagekit_cleanup_interval_seconds,
+                ))
             watcher = asyncio.create_task(_watch_dependencies(app))
             try:
                 yield
             finally:
                 watcher.cancel()
+                if cleanup_watcher is not None:
+                    cleanup_watcher.cancel()
+                    with suppress(asyncio.CancelledError):
+                        await cleanup_watcher
                 with suppress(asyncio.CancelledError):
                     await watcher
 

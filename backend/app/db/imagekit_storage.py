@@ -1,8 +1,11 @@
 import concurrent.futures
 import logging
+import re
 from collections.abc import Sequence
+from urllib.parse import unquote, urlsplit
+from uuid import UUID
 
-from imagekitio import ImageKit
+from imagekitio import ImageKit, NotFoundError
 
 from app.core.config import Settings
 from app.core.errors import ApiError
@@ -30,6 +33,47 @@ class ImageKitStorage:
         except Exception as exc:
             logger.warning("ImageKit health check failed: %s", exc)
             raise
+
+    def delete_prediction_images(self, prediction_id: str, urls: Sequence[str]) -> None:
+        """Resolve legacy URL-only records to exact fileIds; retries are idempotent."""
+        record_id = str(UUID(prediction_id))
+        endpoint = urlsplit(self.url_endpoint)
+        prefix = endpoint.path.rstrip("/") + "/"
+        paths: set[str] = set()
+        # Validate every URL before deleting anything, including the record's UUID.
+        for url in urls:
+            parsed = urlsplit(url)
+            if (parsed.scheme, parsed.netloc) != (endpoint.scheme, endpoint.netloc) or not parsed.path.startswith(prefix):
+                raise ValueError("Cleanup URL does not belong to configured ImageKit endpoint")
+            path = "/" + unquote(parsed.path[len(prefix):])
+            pattern = rf"/uploads/(single|batch|xai)/\d{{4}}/\d{{2}}/\d{{2}}/{re.escape(record_id)}_[^/]+"
+            if not re.fullmatch(pattern, path) or "\\" in path:
+                raise ValueError("Cleanup path does not belong to deleted prediction")
+            if "/xai/" in path and path.rsplit("/", 1)[1] not in {
+                f"{record_id}_gradcam_overlay.jpg", f"{record_id}_spatial_energy_overlay.jpg",
+            }:
+                raise ValueError("Unexpected XAI cleanup file name")
+            paths.add(path)
+
+        client = self.client.with_options(timeout=10, max_retries=0)
+        for path in sorted(paths):
+            folder, name = path.rsplit("/", 1)
+            skip = 0
+            while True:
+                assets = client.assets.list(
+                    path=folder + "/", type="file", limit=100, skip=skip,
+                    extra_query={"name": name},
+                )
+                match = next((asset for asset in assets if getattr(asset, "file_path", None) == path), None)
+                if match is not None:
+                    try:
+                        client.files.delete(match.file_id)
+                    except NotFoundError:
+                        pass  # Another attempt already removed this exact file.
+                    break
+                if len(assets) < 100:
+                    break  # Missing files are already clean.
+                skip += len(assets)
 
     def upload_images(self, objects: Sequence[ImageObject]) -> list[str]:
         if not objects:

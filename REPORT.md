@@ -32,6 +32,7 @@
 | D5 | Thống kê theo lô | API trả số ảnh đã xử lý, đang chờ, thành công và lỗi, cùng tỷ lệ hoàn thành. Kết quả hợp lệ được lưu theo từng ảnh. |
 | D6 | Chỉ mục và tìm kiếm | SQL trong kế hoạch định nghĩa chỉ mục theo `created_at`, `waste_type` và `pipeline_type`. Adapter tìm tên ảnh bằng `ILIKE`. Sự tồn tại của các chỉ mục trên Supabase chưa được kiểm tra trực tiếp trong lượt rà soát này. |
 | D7 | Lỗi dịch vụ phụ thuộc | Backend dò Supabase và kho ảnh theo chu kỳ mặc định 30 giây. Kiểm thử local xác nhận API trả 503 khi thiếu cấu hình cloud và báo lỗi riêng từng ảnh trong lô. |
+| D8 | Xóa đồng bộ Supabase → ImageKit | Đã cài SQL trên Supabase, xác nhận RPC và token trả HTTP 204 với ID không tồn tại. Backend đã triển khai trên Render tại commit `b225567`, trạng thái live, health healthy, Supabase connected và ImageKit reachable. Có 9 kiểm thử Python cùng kiểm thử PostgreSQL local về trigger, rollback, quyền, thời hạn giữ việc và thử lại. Đã tìm đúng ba tệp từ một bản ghi thật bằng kiểm tra chỉ đọc; chưa dùng lịch sử thật làm phép thử xóa. Xem [hướng dẫn](docs/IMAGEKIT_CLEANUP.md). |
 
 ### Frontend
 

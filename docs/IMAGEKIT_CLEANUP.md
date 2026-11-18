@@ -1,6 +1,6 @@
 # Xóa ảnh ImageKit khi xóa lịch sử Supabase
 
-**Trạng thái:** mã và SQL đã kiểm thử local. Cần chạy SQL trên Supabase và triển khai backend có cấu hình token để kích hoạt trên dịch vụ thật.
+**Trạng thái ngày 18/11/2026:** SQL và token đã được xác minh trên Supabase; backend có tác vụ dọn ảnh đã triển khai thành công trên Render tại commit `b225567`. Endpoint health trả `healthy`, database `connected`, storage `reachable`. Các kiểm thử Python/PostgreSQL local đã qua. Chưa dùng lịch sử thật làm phép thử xóa trên cloud.
 
 ## Cách hoạt động
 

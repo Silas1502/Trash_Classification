@@ -292,6 +292,7 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
 | **D5** | Thống kê phiên xử lý nhiều ảnh | API trả `batch_id`, `total_images`, `processed_images`, `pending_images`, `succeeded_images`, `failed_images`, `completion_rate`, `results` và `errors`. Supabase lưu lịch sử theo từng ảnh. | Nâng cao |
 | **D6** | Chỉ mục trên cơ sở dữ liệu | SQL thiết lập tạo chỉ mục cho `created_at`, `waste_type` và `pipeline_type`. Tìm tên tệp bằng `ILIKE` trong adapter Supabase. | Bắt buộc |
 | **D7** | Xử lý lỗi dịch vụ phụ thuộc | Backend kiểm tra Supabase và ImageKit theo chu kỳ. Khi lưu trữ hoặc database lỗi, API trả lỗi tương ứng; batch có thể trả kết quả một phần kèm lỗi theo ảnh. | Nâng cao |
+| **D8** | Xóa ảnh theo lịch sử Supabase | Đã cài SQL trigger/hàng đợi trên Supabase và triển khai tác vụ dọn ImageKit trên Render. Khi backend chạy, kiểm tra mỗi 60 giây, xóa ảnh gốc cùng hai ảnh XAI và thử lại khi lỗi. Bản ghi cũ chỉ có URL vẫn được hỗ trợ. Xem [hướng dẫn](IMAGEKIT_CLEANUP.md). | Nâng cao |
 
 #### Cấu trúc Bản ghi dữ liệu mẫu (`prediction_logs`):
 ```json

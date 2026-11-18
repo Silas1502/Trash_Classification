@@ -240,7 +240,7 @@ function PredictionSummary({ data }: { data: HistoryTrendsResponse }) {
   </dl>;
 }
 
-export default function HistoryCharts({ active }: { active: boolean }) {
+export default function HistoryCharts() {
   const [period, setPeriod] = useState<HistoryTrendPeriod>("today");
   const [data, setData] = useState<HistoryTrendsResponse>();
   const [loading, setLoading] = useState(false);
@@ -248,11 +248,6 @@ export default function HistoryCharts({ active }: { active: boolean }) {
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
-    if (!active) {
-      setPeriod("today");
-      setData(undefined);
-      return;
-    }
     const controller = new AbortController();
     setLoading(true);
     setError(undefined);
@@ -261,7 +256,7 @@ export default function HistoryCharts({ active }: { active: boolean }) {
       .catch(error => { if (!controller.signal.aborted) setError(errorMessage(error, "Không thể tải biểu đồ lịch sử.")); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [active, period, retry]);
+  }, [period, retry]);
 
   const points = data?.points;
   const total = points?.reduce((sum, point) => sum + point.total, 0) ?? 0;
@@ -290,7 +285,7 @@ export default function HistoryCharts({ active }: { active: boolean }) {
       </div>
       {total === 0 && <p className="chart-empty" role="status">Không có ảnh trong khoảng đã chọn.</p>}
     </>}
-    <HistoryDailyTable active={active} />
+    <HistoryDailyTable />
     {interaction.tooltip}
   </div>;
 }

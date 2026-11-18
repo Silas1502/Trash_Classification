@@ -20,7 +20,7 @@ function displayDate(value: string) {
   return value.split("-").reverse().join("/");
 }
 
-export default function HistoryDailyTable({ active }: { active: boolean }) {
+export default function HistoryDailyTable() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({ start: "", end: "" });
   const [range, setRange] = useState<{ start: string; end: string }>();
@@ -37,7 +37,7 @@ export default function HistoryDailyTable({ active }: { active: boolean }) {
   }, []);
 
   useEffect(() => {
-    if (!active || !open || !range) return;
+    if (!open || !range) return;
     const controller = new AbortController();
     setLoading(true);
     setError(undefined);
@@ -47,7 +47,7 @@ export default function HistoryDailyTable({ active }: { active: boolean }) {
       .catch(error => { if (!controller.signal.aborted) setError(errorMessage(error, "Không thể tải số liệu theo ngày.")); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [active, open, range, page, retry]);
+  }, [open, range, page, retry]);
 
   function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

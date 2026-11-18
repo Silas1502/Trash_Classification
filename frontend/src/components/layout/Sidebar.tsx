@@ -3,13 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Clock3, Layers } from "lucide-react";
+import { ChartNoAxesColumnIncreasing, Clock3, Layers } from "lucide-react";
 import SystemStatusBadge from "@/components/layout/SystemStatusBadge";
 import { cn } from "@/lib/utils";
 
 const routes = [
   { href: "/classify", label: "Phân loại", icon: Layers },
   { href: "/history", label: "Lịch sử", icon: Clock3 },
+  { href: "/statistics", label: "Thống kê", icon: ChartNoAxesColumnIncreasing },
 ];
 
 export default function Sidebar() {

@@ -7,7 +7,7 @@ import BatchResultTable from "@/components/classify/BatchResultTable";
 import { Button, PanelTitle } from "@/components/ui/Primitives";
 import { useToast } from "@/components/ui/Toast";
 import { readDroppedFiles } from "@/lib/dropFiles";
-import { cn, imageAccept, isImage } from "@/lib/utils";
+import { cn, imageAccept, isImage, maxImageBytes } from "@/lib/utils";
 import { errorMessage } from "@/services/api";
 import { groupUploads, predictBatch } from "@/services/predictService";
 import type { PredictionResponse } from "@/types";
@@ -19,7 +19,7 @@ export type BatchRow = (QueuedImage & { result: PredictionResponse }) | BatchErr
 function validationError(file: File) {
   if (!isImage(file)) return "Định dạng không được hỗ trợ. Hãy dùng JPG, PNG hoặc WEBP.";
   if (file.size === 0) return "Tệp ảnh không có dữ liệu.";
-  if (file.size > 8 * 1024 ** 2) return "Ảnh vượt quá dung lượng tối đa 8 MB.";
+  if (file.size > maxImageBytes) return "Ảnh vượt quá dung lượng tối đa 8 MB.";
 }
 
 export default function BatchImageUpload() {

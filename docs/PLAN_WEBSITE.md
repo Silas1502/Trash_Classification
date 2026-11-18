@@ -100,7 +100,7 @@ TRASH_CLASSIFICATION_SYSTEM/
 │   │   ├── 📂 api/
 │   │   │   ├── 📂 endpoints/
 │   │   │   │   ├── predict.py                # API /predict/single, /predict/batch
-│   │   │   │   ├── history.py                # API /history, /history/{id}, /history/export
+│   │   │   │   ├── history.py                # API /history, /history/{id}, /history/export, /history/statistics
 │   │   │   │   └── system.py                 # API /health, /model-info
 │   │   │   └── router.py                     # Tiền tố /api/v1
 │   │   ├── 📂 core/
@@ -196,6 +196,9 @@ Các endpoint nghiệp vụ trong bảng dùng tiền tố `/api/v1`.
 | **B10**| CORS Middleware & Error Handling | Cấu hình middleware CORS cho phép frontend Next.js gọi API; cơ chế bắt lỗi tập trung (Global Exception Handler) chuẩn hóa format lỗi JSON. | Bắt buộc |
 | **B11**| Thông tin Model (`GET /model-info`) | Trả về thông tin kiến trúc mô hình (ConvNeXt-Tiny), phiên bản checkpoint, kích thước ảnh đầu vào ($320 \times 320$) và toàn bộ nội dung cấu hình bộ ngưỡng an toàn đọc trực tiếp từ file `safety_thresholds.json`. Trường `adaptive_assessment_enabled` có giá trị `false` ở cấu hình hiện tại. | Bonus |
 | **B12** | Giải thích mô hình với XAI | Trích đặc trưng từ `convnext_tiny_stage_3_block_2_identity`, tính Grad-CAM bằng đồ thị gradient ONNX và Spatial Energy từ kích hoạt. Hai ảnh phủ nhiệt dùng bảng màu JET, được lưu trên ImageKit. | Nâng cao |
+| **B13** | Thống kê lịch sử (`GET /history/statistics`) | Nhận `start_date` và `end_date` theo dạng `YYYY-MM-DD`. Tính cả hai ngày theo giờ Việt Nam. Supabase đếm chính xác toàn bộ bản ghi trong khoảng, theo loại rác và theo luồng xử lý. | Nâng cao |
+| **B14** | Dữ liệu biểu đồ lịch sử (`GET /history/trends`) | Nhận `period=today\|week\|month\|quarter`. Hôm nay bắt đầu lúc 00:00 theo giờ Việt Nam, trả 24 mốc giờ với cờ `is_future` cho các giờ chưa tới. Các khoảng còn lại dùng 7, 30, 90 ngày gần nhất. Trả tổng số ảnh và số ảnh theo luồng ở từng mốc, cùng tổng theo loại rác trong cả khoảng. | Nâng cao |
+| **B15** | Số liệu theo ngày (`GET /history/daily`) | Nhận `start_date`, `end_date` và `page`. Mỗi trang trả tối đa 5 ngày, có tổng số ngày và tổng số trang. Khoảng ngày tính cả hai đầu theo giờ Việt Nam. Chỉ truy vấn các ngày thuộc trang đang xem. | Nâng cao |
 
 #### Chi tiết Quy trình Xử lý Dữ liệu trước khi nạp vào Mô hình
 Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-Tiny của notebook `kltn-convnext-tiny.ipynb`.
@@ -263,6 +266,11 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
   "waste_type": "Nhựa",
   "confidence": 90.0,
   "margin": 85.0,
+  "top_predictions": [
+    {"waste_type": "Nhựa", "probability": 90.0},
+    {"waste_type": "Thủy tinh", "probability": 5.0}
+  ],
+  "processing_time_ms": 72.5,
   "checkpoint_1": 75.64,
   "checkpoint_2": 54.34,
   "confidence_gate_passed": true,
@@ -288,7 +296,7 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
 | **D1** | Cấu hình ImageKit | Thiết lập `IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY` và `IMAGEKIT_URL_ENDPOINT` ở backend. Render hiện lưu ảnh bằng ImageKit. | Bắt buộc |
 | **D2** | Module kết nối Cloud Storage (`imagekit_storage.py`) | Backend tải ba tệp của mỗi dự đoán lên các thư mục `/uploads/single/…` hoặc `/uploads/batch/…` và `/uploads/xai/…`. Có adapter Supabase Storage dự phòng khi đã cấu hình Supabase và thiếu cấu hình ImageKit. | Bắt buộc |
 | **D3** | Cấu hình Supabase PostgreSQL | Dùng bảng `prediction_logs` để đọc, lọc, ghi và xuất kết quả. Biến kết nối được đặt ở backend. | Bắt buộc |
-| **D4** | Thiết kế bảng `prediction_logs` | Lưu kết quả phân loại, hai chốt, quyết định, thời gian, metadata, `is_mock`, `image_url`, `xai_overlay_url` và `xai_energy_overlay_url`. | Bắt buộc |
+| **D4** | Thiết kế bảng `prediction_logs` | Lưu kết quả phân loại, hai chốt, quyết định, thời gian, metadata, `is_mock`, `image_url`, `xai_overlay_url` và `xai_energy_overlay_url`. Bản ghi mới lưu hai lớp đứng đầu trong `metadata.top_predictions`. | Bắt buộc |
 | **D5** | Thống kê phiên xử lý nhiều ảnh | API trả `batch_id`, `total_images`, `processed_images`, `pending_images`, `succeeded_images`, `failed_images`, `completion_rate`, `results` và `errors`. Supabase lưu lịch sử theo từng ảnh. | Nâng cao |
 | **D6** | Chỉ mục trên cơ sở dữ liệu | SQL thiết lập tạo chỉ mục cho `created_at`, `waste_type` và `pipeline_type`. Tìm tên tệp bằng `ILIKE` trong adapter Supabase. | Bắt buộc |
 | **D7** | Xử lý lỗi dịch vụ phụ thuộc | Backend kiểm tra Supabase và ImageKit theo chu kỳ. Khi lưu trữ hoặc database lỗi, API trả lỗi tương ứng; batch có thể trả kết quả một phần kèm lỗi theo ảnh. | Nâng cao |
@@ -324,6 +332,11 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
     "mime_type": "image/jpeg",
     "inference_time_ms": 38.5,
     "xai_time_ms": 12.0,
+    "processing_time_ms": 72.5,
+    "top_predictions": [
+      {"waste_type": "Nhựa", "probability": 90.0},
+      {"waste_type": "Thủy tinh", "probability": 5.0}
+    ],
     "model_version": "convnext_tiny_onnx_fp32",
     "tta_views": 5,
     "crop_box": [0, 0, 320],
@@ -348,6 +361,15 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
 | **F8** | Thiết kế Responsive | Tương thích và hiển thị tốt trên các độ phân giải màn hình từ Desktop đến Laptop/Tablet. | Bắt buộc |
 | **F9** | Trực quan hóa XAI Heatmap (Grad-CAM Viewer) | Hỗ trợ hiển thị bản đồ nhiệt màu JET trực quan minh bạch hóa đặc trưng nhận diện của mô hình AI, giúp người vận hành biết được mô hình dựa vào đâu để ra quyết định phân loại rác. | Nâng cao |
 | **F10** | Đèn báo trạng thái Server & Pre-warming Ping | Khi mở web, `SystemStatusBadge.tsx` gọi `/api/v1/health` với timeout 5 giây và kiểm tra lại sau 30 giây. Sidebar hiển thị Đang kết nối, Sẵn sàng, Hạn chế hoặc Mất kết nối. | Nâng cao |
+| **F11** | Thử với ảnh mẫu | Tab **Một ảnh** có năm ảnh mẫu gồm Nhựa, Giấy, Kim loại, Thủy tinh và một tình huống cần kiểm tra thủ công. Ảnh đã chọn xuất hiện trong khung xem trước. Nút **Bắt đầu dự đoán** dùng luồng dự đoán và XAI hiện có. | Nâng cao |
+| **F12** | Xuất CSV lượt xử lý nhiều ảnh | Nút dưới bảng tải CSV do trình duyệt tạo. Tệp gồm các ảnh đã có kết quả hoặc lỗi trong lượt hiện tại, kèm tên tệp, loại rác, độ tin cậy, biên khoảng cách, hai ngưỡng, luồng, thời gian xử lý và lỗi từng ảnh. | Nâng cao |
+| **F13** | Bảng số liệu theo khoảng ngày | Phần **Xem số liệu theo ngày** có hai ô **Từ ngày**, **Đến ngày**, nút **Xem số liệu** và nút chuyển trang. Mỗi trang hiển thị tối đa 5 ngày, có tổng số ảnh, Tự động và Thủ công. Khoảng ngày này độc lập với bộ lọc biểu đồ. | Nâng cao |
+| **F14** | Hai lớp có xác suất cao nhất | Hiển thị tên và xác suất của hai lớp đứng đầu, chênh lệch theo điểm phần trăm và chốt chưa đạt trong luồng **Thủ công**. Có ở kết quả một ảnh, chi tiết của bảng nhiều ảnh và chi tiết bản ghi mới. | Nâng cao |
+| **F15** | Chụp ảnh từ điện thoại | Nút **Chụp ảnh** trong tab **Một ảnh** mở trình chụp trên thiết bị hỗ trợ. Ảnh hiện trong khung xem trước để người dùng kiểm tra rồi mới bấm dự đoán. | Nâng cao |
+| **F16** | Thống kê bằng biểu đồ | Phần **Thống kê** mặc định đóng với mũi tên hướng lên, mở bằng nút mũi tên và đổi sang hướng xuống. Biểu đồ tải khi phần này được mở. Đã bỏ dòng khoảng thời gian cạnh bộ lọc và tăng nhẹ chữ tiêu đề, chú thích, nhãn trục. Bố cục desktop gồm bốn ô 2 × 2. Ba biểu đồ dùng chung bộ lọc **Hôm nay**, **1 tuần**, **1 tháng**, **3 tháng**. Hôm nay giữ trục 00h–23h, vẽ dữ liệu đến giờ hiện tại và để trống các giờ chưa tới. Biểu đồ đường hiển thị tổng số ảnh, cột dọc so sánh **Tự động** và **Cần kiểm tra**. Donut **Số ảnh theo loại rác** dùng bốn màu riêng, ghi tổng ảnh của bốn loại ở giữa và hiển thị tỷ lệ của từng phần. Ô cuối trình bày đặc điểm bốn loại rác. Khi đổi bộ lọc, cập nhật giá trị và trục trong cùng kích thước khung. Hover, chạm hoặc focus vào giá trị hiển thị số ảnh và tỷ trọng. Donut tính tỷ trọng trên tổng bốn loại hiển thị, hai biểu đồ thời gian tính trên tổng ảnh trong khoảng. Khoảng 1 tuần và 1 tháng dùng từng ngày, khoảng 3 tháng dùng từng tuần. | Nâng cao |
+| **F17** | Ba thẻ tổng quan dự đoán | Hiển thị **Số lượng ảnh dự đoán**, **Số lượng ảnh phân loại tự động**, **Số lượng ảnh phân loại thủ công** thành một hàng phía trên các biểu đồ trên desktop. Ba thẻ dùng chung bộ lọc thời gian với biểu đồ và xếp dọc trên điện thoại. | Nâng cao |
+
+Mỗi lần mở phần **Thống kê**, bộ lọc mặc định là **Hôm nay**. Cỡ chữ nội dung, số liệu, nhãn trục và chú thích được tăng nhẹ để dễ đọc.
 
 ---
 
@@ -389,6 +411,8 @@ Dự án áp dụng mô hình **Monorepo** với một [repository GitHub](https
 1. **Demo Phân loại 1 ảnh:** Tải một ảnh rác rồi kiểm tra loại rác, hai thanh **Độ tin cậy** và **Biên khoảng cách** có ngưỡng trong ngoặc, luồng xử lý, trạng thái và gợi ý.
 2. **Demo Phân loại theo thư mục:** Chọn một thư mục nhiều ảnh rác $\rightarrow$ Quan sát thanh tiến trình chạy và danh sách ảnh được xử lý đổ vào bảng dữ liệu.
 3. **Demo Tra cứu Lịch sử:** Lọc theo loại rác hoặc luồng xử lý, mở chi tiết để xem ba ảnh từ ImageKit, rồi nhấn *Xuất lịch sử* để tải CSV.
+4. **Demo ảnh mẫu và hai chốt:** Chạy một ảnh mẫu đại diện và ảnh **Tình huống cần kiểm tra**. Đối chiếu hai lớp đứng đầu, biên khoảng cách và lý do chuyển luồng. Mở hai ảnh XAI.
+5. **Demo báo cáo và điện thoại:** Xuất CSV ngay dưới bảng **Nhiều ảnh**, chọn khoảng ngày trong **Lịch sử** để xem thống kê, rồi chụp thử một ảnh trên điện thoại và kiểm tra ảnh xem trước.
 
 ---
 

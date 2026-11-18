@@ -1,4 +1,5 @@
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, Field, StringConstraints, model_validator
 
@@ -33,4 +34,52 @@ class HistoryPage(BaseModel):
     total: int
     page: int
     limit: int
+    total_pages: int
+
+
+class HistoryStatisticsRange(BaseModel):
+    start_date: date
+    end_date: date
+
+    @model_validator(mode="after")
+    def dates_in_order(self):
+        if self.start_date > self.end_date:
+            raise ValueError("Ngày bắt đầu phải trước hoặc trùng ngày kết thúc.")
+        return self
+
+
+class HistoryDailyQuery(HistoryStatisticsRange):
+    page: int = Field(default=1, ge=1)
+
+
+class HistoryStatistics(BaseModel):
+    total: int
+    by_waste_type: dict[WasteType, int]
+    by_pipeline: dict[PipelineType, int]
+
+
+HistoryTrendPeriod = Literal["today", "week", "month", "quarter"]
+
+
+class HistoryTrendPoint(BaseModel):
+    start_date: date
+    end_date: date
+    total: int = 0
+    automatic: int = 0
+    needs_review: int = 0
+    start_at: AwareDatetime | None = None
+    end_at: AwareDatetime | None = None
+    is_future: bool = False
+
+
+class HistoryTrends(BaseModel):
+    unit: Literal["hour", "day", "week"]
+    points: list[HistoryTrendPoint]
+    by_waste_type: dict[WasteType, int]
+
+
+class HistoryDailyPage(BaseModel):
+    points: list[HistoryTrendPoint]
+    page: int
+    total_days: int
     total_pages: int

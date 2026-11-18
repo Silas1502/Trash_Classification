@@ -1,4 +1,5 @@
 import { ChartNoAxesColumnIncreasing, Layers, Recycle, Target } from "lucide-react";
+import { PredictionComparison } from "@/components/classify/PredictionComparison";
 import { Empty, Notice, PanelTitle, PipelineBadge, ProgressBar, Skeleton, StatusBadge } from "@/components/ui/Primitives";
 import { PredictionImages } from "@/components/ui/PredictionImages";
 import { formatGateReading, predictionGates } from "@/lib/predictionGates";
@@ -35,6 +36,7 @@ export default function SingleImageResult({ result, busy }: { result?: Predictio
           </div>
         </div>)}
       </div>
+      <PredictionComparison result={result} />
       <Notice><strong>Gợi ý:</strong> {result.suggestion}</Notice>
     </> : <Empty icon={Target} title="Chưa có kết quả dự đoán">Chọn một ảnh và bấm “Bắt đầu dự đoán” để xem loại rác và độ tin cậy.</Empty>}
   </section>;

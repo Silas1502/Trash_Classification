@@ -29,7 +29,19 @@ export function formatSize(bytes: number) {
   return bytes >= 1024 ** 2 ? (bytes / 1024 ** 2).toFixed(2) + " MB" : Math.ceil(bytes / 1024) + " KB";
 }
 
+export function downloadBlob(data: Blob, fileName: string) {
+  const url = URL.createObjectURL(data);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 export const imageAccept = "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
+export const maxImageBytes = 8 * 1024 ** 2;
 
 export function isImage(file: File) {
   return /^(image\/jpeg|image\/png|image\/webp)$/i.test(file.type) ||

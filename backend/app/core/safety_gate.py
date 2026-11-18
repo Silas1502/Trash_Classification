@@ -92,6 +92,8 @@ class SafetyDecision:
     top_index: int
     waste_type: WasteType
     confidence: float
+    runner_up_type: WasteType
+    runner_up_probability: float
     margin: float
     confidence_threshold: float
     margin_threshold: float
@@ -175,7 +177,9 @@ class SafetyFilter:
         if not automatic:
             suggestion = f"Kiểm tra thủ công loại rác trước khi xử lý. Nếu xác nhận là {detail.name_vi.lower()}: {suggestion}"
         return SafetyDecision(
-            top_index=first, waste_type=detail.name_vi, confidence=confidence, margin=margin,
+            top_index=first, waste_type=detail.name_vi, confidence=confidence,
+            runner_up_type=cfg.classes.details[cfg.classes.labels[second]].name_vi,
+            runner_up_probability=scores[second], margin=margin,
             confidence_threshold=tau_conf, margin_threshold=tau_margin, confidence_gate_passed=confidence_passed,
             margin_gate_passed=margin_passed, composite_score=composite, tta_stability=tta_stability,
             decision_tier=tier, reason=reason, decision="Tu_Dong_Gap" if automatic else "Chuyen_Khay_Thu_Cong",

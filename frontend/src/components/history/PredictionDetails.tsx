@@ -1,6 +1,7 @@
 "use client";
 
 import { CalendarDays, CircleAlert, ImageIcon, Layers, Recycle, Target, Timer } from "lucide-react";
+import { PredictionComparison } from "@/components/classify/PredictionComparison";
 import { Notice, PipelineBadge, StatusBadge, WasteBadge } from "@/components/ui/Primitives";
 import { PredictionImages } from "@/components/ui/PredictionImages";
 import { formatGateReading, predictionGates } from "@/lib/predictionGates";
@@ -42,6 +43,7 @@ export function PredictionDetails({ result, preview }: { result: PredictionRespo
         <dt><Icon aria-hidden />{label}:</dt><dd>{value}</dd>
       </div>)}
     </dl>
+    <PredictionComparison result={result} ranked={result.top_predictions ?? metadata?.top_predictions} />
     <Notice><strong>Gợi ý:</strong> {result.suggestion}</Notice>
   </div>;
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import HistoryFilterBar, { initialFilters, type FilterValues } from "@/components/history/HistoryFilterBar";
+import HistoryAnalytics from "@/components/history/HistoryAnalytics";
 import HistoryTable from "@/components/history/HistoryTable";
 import { PredictionDetails } from "@/components/history/PredictionDetails";
 import { Modal } from "@/components/ui/Modal";
@@ -79,6 +80,7 @@ export default function HistoryPage() {
     <header className="page-header"><h1>Lịch sử phân loại</h1><p>Tra cứu kết quả phân loại rác đã thực hiện</p></header>
     <HistoryFilterBar value={filters} onChange={value => { setFilters(value); if (value.waste !== waste || value.pipeline !== pipeline || value.range !== range) setPage(1); setSelected(undefined); }}
       onExport={download} exporting={exporting} />
+    <HistoryAnalytics />
     <HistoryTable data={data} loading={loading} error={error} activeId={selectedId}
       onSelect={item => { setDetail({ loading: true }); setSelected(item); }}
       onPage={setPage} onRetry={() => setRetry(retry + 1)} />

@@ -37,8 +37,17 @@ class PredictionResult(BaseModel):
     created_at: datetime
 
 
+class RankedPrediction(BaseModel):
+    waste_type: WasteType
+    probability: Percent
+
+
+TopPredictions = tuple[RankedPrediction, RankedPrediction]
+
+
 class PredictionResponse(PredictionResult):
     processing_time_ms: DurationMs
+    top_predictions: TopPredictions
 
 
 class PredictionMetadata(BaseModel):
@@ -51,6 +60,7 @@ class PredictionMetadata(BaseModel):
     crop_box: tuple[int, int, int]  # x, y, side in the decoded original
     crop_strategy: Literal["subject_center", "image_center"]
     processing_time_ms: DurationMs | None = None
+    top_predictions: TopPredictions | None = None
 
 
 class BatchError(BaseModel):

@@ -17,7 +17,7 @@ from app.db.storage import ImageObject
 from app.ml.types import DummyPredictor, InferenceResult
 from app.ml.preprocessor import IMAGE_TYPES, InvalidImage, PreparedImage
 from app.schemas.history import HistoryItem
-from app.schemas.prediction import BatchError, BatchResult, PredictionMetadata, PredictionResponse
+from app.schemas.prediction import BatchError, BatchResult, PredictionMetadata, PredictionResponse, RankedPrediction
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/predict", tags=["Prediction"])
@@ -121,15 +121,20 @@ async def _persist(
         decision_tier=decision.decision_tier, decision=decision.decision, reason=decision.reason, is_mock=is_mock,
         pipeline_type=decision.pipeline_type, status=decision.status, suggestion=decision.suggestion,
         created_at=now, processing_time_ms=processing_time_ms,
+        top_predictions=(
+            RankedPrediction(waste_type=decision.waste_type, probability=round(decision.confidence * 100, 4)),
+            RankedPrediction(waste_type=decision.runner_up_type, probability=round(decision.runner_up_probability * 100, 4)),
+        ),
     )
     if is_mock:
         return result
     history = HistoryItem(
-        **result.model_dump(exclude={"processing_time_ms"}),
+        **result.model_dump(exclude={"processing_time_ms", "top_predictions"}),
         metadata=PredictionMetadata(
             file_size=len(source.contents), mime_type=image.mime_type,
             inference_time_ms=round(output.inference_time_ms, 2), xai_time_ms=round(output.xai_time_ms, 2),
             processing_time_ms=processing_time_ms,
+            top_predictions=result.top_predictions,
             model_version=state.model.checkpoint.removesuffix(".keras"), tta_views=int(state.settings.tta_views),
             crop_box=image.crop_box, crop_strategy=image.crop_strategy,
         ),

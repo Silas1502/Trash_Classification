@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, List } from "lucide-react";
+import { ChevronDown, Download, List } from "lucide-react";
 import type { BatchRow } from "@/components/classify/BatchImageUpload";
 import { PredictionDetails } from "@/components/history/PredictionDetails";
 import { Modal } from "@/components/ui/Modal";
-import { Empty, Notice, PanelTitle, PipelineBadge, SearchInput, Skeleton, WasteBadge } from "@/components/ui/Primitives";
+import { Button, Empty, Notice, PanelTitle, PipelineBadge, SearchInput, Skeleton, WasteBadge } from "@/components/ui/Primitives";
 import { Picture } from "@/components/ui/PredictionImages";
+import { batchCsv } from "@/lib/batchCsv";
 import { formatGateReading, gateLabels, predictionGates } from "@/lib/predictionGates";
-import { formatDuration } from "@/lib/utils";
+import { downloadBlob, formatDuration } from "@/lib/utils";
 import { wasteTypes, type WasteType } from "@/types";
 
 export default function BatchResultTable({ rows, busy }: { rows: BatchRow[]; busy: boolean }) {
@@ -65,6 +66,12 @@ export default function BatchResultTable({ rows, busy }: { rows: BatchRow[]; bus
         {!rows.length && "Chọn ảnh hoặc thư mục rồi bắt đầu xử lý."}
       </Empty>)}
     </div>
+    {rows.length > 0 && <div className="batch-export">
+      <Button variant="outline" disabled={busy} onClick={() => {
+        const csv = new Blob([batchCsv(rows)], { type: "text/csv;charset=utf-8" });
+        downloadBlob(csv, "ket_qua_phan_loai_nhieu_anh.csv");
+      }}><Download aria-hidden />Xuất CSV lượt xử lý</Button>
+    </div>}
     <Notice>Nhấn vào một dòng để xem chi tiết kết quả.</Notice>
     {selected && <Modal title="Chi tiết dự đoán" onClose={() => setSelected(undefined)}>
       {"result" in selected ? <PredictionDetails result={selected.result} preview={selected.url} /> : <div className="failed-detail">

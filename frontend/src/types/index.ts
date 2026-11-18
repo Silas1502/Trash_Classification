@@ -1,4 +1,5 @@
-export const wasteTypes = ["Nhựa", "Giấy", "Kim loại", "Thủy tinh", "Hữu cơ", "Khác"] as const;
+export const modelWasteTypes = ["Nhựa", "Giấy", "Kim loại", "Thủy tinh"] as const;
+export const wasteTypes = [...modelWasteTypes, "Hữu cơ", "Khác"] as const;
 export const pipelineTypes = ["Tự động", "Thủ công"] as const;
 export type WasteType = typeof wasteTypes[number];
 export type PipelineType = typeof pipelineTypes[number] | "Chưa thẩm định";
@@ -8,6 +9,11 @@ export interface HealthCheckResponse {
   model: "loaded" | "mock" | "error";
   database: "connected" | "disconnected" | "checking" | "not_configured";
   storage: "reachable" | "unreachable" | "checking" | "not_configured";
+}
+
+export interface RankedPrediction {
+  waste_type: WasteType;
+  probability: number;
 }
 
 export interface PredictionResponse {
@@ -34,6 +40,7 @@ export interface PredictionResponse {
   suggestion: string;
   created_at: string;
   processing_time_ms?: number;
+  top_predictions?: [RankedPrediction, RankedPrediction];
 }
 
 export interface HistoryItem extends PredictionResponse {
@@ -43,6 +50,7 @@ export interface HistoryItem extends PredictionResponse {
     inference_time_ms: number;
     xai_time_ms: number;
     processing_time_ms?: number | null;
+    top_predictions?: [RankedPrediction, RankedPrediction] | null;
     model_version: string;
     tta_views: 1 | 5;
     crop_box: [number, number, number, number];
@@ -63,6 +71,32 @@ export interface HistoryQueryResponse {
   total: number;
   page: number;
   limit: number;
+  total_pages: number;
+}
+
+export type HistoryTrendPeriod = "today" | "week" | "month" | "quarter";
+
+export interface HistoryTrendPoint {
+  start_date: string;
+  end_date: string;
+  total: number;
+  automatic: number;
+  needs_review: number;
+  start_at?: string | null;
+  end_at?: string | null;
+  is_future?: boolean;
+}
+
+export interface HistoryTrendsResponse {
+  unit: "hour" | "day" | "week";
+  points: HistoryTrendPoint[];
+  by_waste_type: Record<WasteType, number>;
+}
+
+export interface HistoryDailyResponse {
+  points: HistoryTrendPoint[];
+  page: number;
+  total_days: number;
   total_pages: number;
 }
 

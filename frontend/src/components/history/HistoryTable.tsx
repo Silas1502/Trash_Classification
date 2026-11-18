@@ -3,10 +3,12 @@ import { Button, Empty, Notice, PanelTitle, PipelineBadge, Skeleton, WasteBadge 
 import { formatDate, percent } from "@/lib/utils";
 import type { HistoryItem, HistoryQueryResponse } from "@/types";
 
-function Pagination({ page, last, go }: { page: number; last: number; go: (page: number) => void }) {
+export function Pagination({ page, last, go, label = "Phân trang lịch sử" }: {
+  page: number; last: number; go: (page: number) => void; label?: string;
+}) {
   const pages = [...new Set([1, page - 1, page, page + 1, last, ...(page < 3 ? [2, 3] : [])])]
     .filter(item => item >= 1 && item <= last).sort((a, b) => a - b);
-  return <nav className="pagination" aria-label="Phân trang lịch sử">
+  return <nav className="pagination" aria-label={label}>
     <Button variant="outline" aria-label="Trang trước" disabled={page <= 1} onClick={() => go(page - 1)}><ChevronLeft aria-hidden /></Button>
     {pages.map((item, index) => <span className="page-number" key={item}>
       {index > 0 && item - pages[index - 1] > 1 && <span className="page-gap">…</span>}

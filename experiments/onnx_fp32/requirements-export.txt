@@ -1,0 +1,6 @@
+# Install in an isolated environment alongside backend/requirements.txt.
+tf2onnx==1.17.0
+onnx==1.17.0
+protobuf>=5.28,<6
+onnxruntime==1.29.0
+psutil>=6,<8

@@ -1,0 +1,13 @@
+# No tensorflow, keras, torch, onnx or tf2onnx needed on the inference server.
+onnxruntime==1.29.0
+numpy>=1.26,<2.3
+opencv-python-headless>=4.10,<5
+Pillow>=9.5,<11
+pydantic>=2.6,<3
+fastapi>=0.115.12,<1
+uvicorn>=0.34,<1
+python-multipart>=0.0.22,<1
+pydantic-settings>=2.8,<3
+anyio>=4,<5
+supabase>=2,<3
+imagekitio>=5,<6

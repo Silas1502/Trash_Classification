@@ -14,6 +14,10 @@ const periods = [
   { value: "month", label: "1 tháng" },
   { value: "quarter", label: "3 tháng" },
 ] as const;
+const decisionSeries = [
+  { field: "automatic", label: "Tự động", tone: "auto", radius: 4.5 },
+  { field: "needs_review", label: "Cần kiểm tra", tone: "review", radius: 3 },
+] as const;
 const countFormat = new Intl.NumberFormat("vi-VN");
 const timeFormat = new Intl.DateTimeFormat("vi-VN", {
   timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
@@ -38,77 +42,92 @@ function share(value: number, total: number) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(total > 0 ? value * 100 / total : 0) + "%";
 }
 
+type TooltipEntry = { label: string; count: number; total: number; breakdown?: Pick<HistoryTrendPoint, "automatic" | "needs_review"> };
+
 function useChartTooltip(total: number) {
   const id = useId();
-  const [value, setValue] = useState<{ label: string; count: number; total: number; x: number; y: number }>();
+  const [value, setValue] = useState<TooltipEntry & { x: number; y: number }>();
 
-  function show(label: string, count: number, denominator: number, x: number, y: number) {
+  function show(entry: TooltipEntry, x: number, y: number) {
+    const height = entry.breakdown ? 156 : 104;
     setValue({
-      label, count, total: denominator,
+      ...entry,
       x: Math.max(8, Math.min(x + 12, window.innerWidth - 242)),
-      y: Math.max(8, Math.min(y - 104, window.innerHeight - 104)),
+      y: Math.max(8, Math.min(y - height, window.innerHeight - height)),
     });
   }
 
-  function target(label: string, count: number, denominator = total) {
+  function hide() { setValue(undefined); }
+
+  function target(label: string, count: number, denominator = total, breakdown?: TooltipEntry["breakdown"]) {
+    const entry: TooltipEntry = { label, count, total: denominator, breakdown };
     return {
       tabIndex: 0,
-      "aria-label": `${label}, ${countFormat.format(count)} ảnh, ${share(count, denominator)} trên tổng ${countFormat.format(denominator)} ảnh`,
+      "aria-label": breakdown
+        ? `${label}, Tự động ${countFormat.format(breakdown.automatic)} ảnh, Cần kiểm tra ${countFormat.format(breakdown.needs_review)} ảnh, tổng hai nhóm ${countFormat.format(count)} ảnh`
+        : `${label}, ${countFormat.format(count)} ảnh, ${share(count, denominator)} trên tổng ${countFormat.format(denominator)} ảnh`,
       "aria-describedby": value?.label === label ? id : undefined,
-      onPointerEnter: (event: React.PointerEvent<SVGGElement>) => show(label, count, denominator, event.clientX, event.clientY),
-      onPointerMove: (event: React.PointerEvent<SVGGElement>) => show(label, count, denominator, event.clientX, event.clientY),
-      onPointerLeave: () => setValue(undefined),
+      onPointerEnter: (event: React.PointerEvent<SVGGElement>) => show(entry, event.clientX, event.clientY),
+      onPointerMove: (event: React.PointerEvent<SVGGElement>) => show(entry, event.clientX, event.clientY),
+      onPointerLeave: hide,
       onFocus: (event: React.FocusEvent<SVGGElement>) => {
         const rect = event.currentTarget.getBoundingClientRect();
-        show(label, count, denominator, rect.x + rect.width / 2, rect.y);
+        show(entry, rect.x + rect.width / 2, rect.y);
       },
-      onBlur: () => setValue(undefined),
-      onClick: (event: React.MouseEvent<SVGGElement>) => show(label, count, denominator, event.clientX, event.clientY),
-      onKeyDown: (event: React.KeyboardEvent<SVGGElement>) => { if (event.key === "Escape") setValue(undefined); },
+      onBlur: hide,
+      onClick: (event: React.MouseEvent<SVGGElement>) => show(entry, event.clientX, event.clientY),
+      onKeyDown: (event: React.KeyboardEvent<SVGGElement>) => { if (event.key === "Escape") hide(); },
     };
   }
 
   const tooltip = value && <div id={id} className="chart-tooltip" role="tooltip" style={{ left: value.x, top: value.y }}>
     <strong>{value.label}</strong>
-    <span><b>{countFormat.format(value.count)} ảnh</b> · {share(value.count, value.total)}</span>
-    <small>trên tổng {countFormat.format(value.total)} ảnh trong khoảng</small>
+    {value.breakdown ? <>
+      <span className="chart-tooltip-auto">Tự động <b>{countFormat.format(value.breakdown.automatic)} ảnh</b> · {share(value.breakdown.automatic, value.total)}</span>
+      <span className="chart-tooltip-review">Cần kiểm tra <b>{countFormat.format(value.breakdown.needs_review)} ảnh</b> · {share(value.breakdown.needs_review, value.total)}</span>
+      <small>Tổng hai nhóm tại mốc này {countFormat.format(value.count)} ảnh</small>
+    </> : <>
+      <span><b>{countFormat.format(value.count)} ảnh</b> · {share(value.count, value.total)}</span>
+      <small>trên tổng {countFormat.format(value.total)} ảnh trong khoảng</small>
+    </>}
   </div>;
-  return { target, tooltip };
+  return { target, tooltip, hide };
 }
 
 function TimeChart({ points, variant, interaction }: {
-  points: HistoryTrendPoint[]; variant: "line" | "bars"; interaction: ReturnType<typeof useChartTooltip>;
+  points: HistoryTrendPoint[]; variant: "total" | "comparison"; interaction: ReturnType<typeof useChartTooltip>;
 }) {
   const { target } = interaction;
-  const line = variant === "line";
-  const title = line ? "Số ảnh dự đoán theo thời gian" : "Tự động và cần kiểm tra theo thời gian";
+  const comparison = variant === "comparison";
+  const title = comparison ? "Tự động và cần kiểm tra theo thời gian" : "Số ảnh dự đoán theo thời gian";
   const width = 700;
   const height = 280;
   const left = 54;
   const top = 30;
   const bottom = 228;
   const slot = (width - left - 20) / Math.max(1, points.length);
-  const peak = line ? Math.max(0, ...points.map(point => point.total)) :
-    Math.max(0, ...points.map(point => Math.max(point.automatic, point.needs_review)));
+  const observed = points.map((point, index) => ({ point, index })).filter(({ point }) => !point.is_future);
+  const peak = Math.max(0, ...observed.map(({ point }) =>
+    comparison ? Math.max(point.automatic, point.needs_review) : point.total));
   const step = Math.max(1, Math.ceil(peak / 4));
   const divisions = Math.max(1, Math.ceil(peak / step));
   const y = (value: number) => bottom - (bottom - top) * value / (divisions * step);
   const x = (index: number) => left + (index + 0.5) * slot;
   const labelStep = Math.ceil(points.length / 7);
-  const bar = Math.min(28, slot * 0.4);
-  const observed = points.map((point, index) => ({ point, index })).filter(({ point }) => !point.is_future);
-  const linePoints = observed.map(({ point, index }) => `${x(index)},${y(point.total)}`).join(" ");
+  function coordinates(field: "total" | "automatic" | "needs_review") {
+    return observed.map(({ point, index }) => `${x(index)},${y(point[field])}`).join(" ");
+  }
+  const totalLine = comparison ? "" : coordinates("total");
 
   return <figure className="history-chart">
     <figcaption>{title}</figcaption>
     <div className="chart-legend">
-      {!line && <>
-        <span><i className="chart-auto" />Tự động</span>
-        <span><i className="chart-review" />Cần kiểm tra</span>
-      </>}
+      {comparison && decisionSeries.map(({ field, label, tone }) =>
+        <span key={field}><i className={`chart-swatch chart-series-${tone}`} aria-hidden />{label}</span>
+      )}
     </div>
     <div className="chart-scroll">
-      <svg className="analytics-chart-svg"
+      <svg className={comparison ? "analytics-chart-svg analytics-chart-comparison" : "analytics-chart-svg"}
         viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
         {Array.from({ length: divisions + 1 }, (_, index) => {
           const value = index * step;
@@ -117,33 +136,36 @@ function TimeChart({ points, variant, interaction }: {
             <text x={left - 7} y={y(value)} dy=".32em" textAnchor="end">{countFormat.format(value)}</text>
           </g>;
         })}
-        {line && observed.length > 0 && <>
+        {!comparison && observed.length > 0 && <>
           <polygon className="chart-area" points={
-            `${x(observed[0].index)},${bottom} ` + linePoints +
+            `${x(observed[0].index)},${bottom} ` + totalLine +
             ` ${x(observed[observed.length - 1].index)},${bottom}`
           } />
-          <polyline className="chart-line" points={linePoints} />
+          <polyline className="chart-line" points={totalLine} />
         </>}
-        {points.map((point, index) => <g key={point.start_at ?? point.start_date}>
-          {!point.is_future && (line ? <g className="chart-value" {...target(interval(point) + " · Tổng số ảnh", point.total)}>
-            <circle className="chart-point" cx={x(index)} cy={y(point.total)} r={points.length > 13 ? 3 : 4} />
-            {points.length <= 13 && <text className="chart-value-label" x={x(index)} y={y(point.total) - 12} textAnchor="middle">{point.total}</text>}
-            <rect x={x(index) - slot / 2} y={top - 14} width={slot} height={bottom - top + 25} fill="transparent" />
-          </g> : <>
-            <g className="chart-value" {...target(interval(point) + " · Tự động", point.automatic)}>
-              <rect className="chart-auto" x={x(index) - bar - 1} y={y(point.automatic)} width={bar}
-                height={bottom - y(point.automatic)} rx="2" />
-              <rect x={x(index) - slot / 2} y={top} width={slot / 2} height={bottom - top + 6} fill="transparent" />
-            </g>
-            <g className="chart-value" {...target(interval(point) + " · Cần kiểm tra", point.needs_review)}>
-              <rect className="chart-review" x={x(index) + 1} y={y(point.needs_review)} width={bar}
-                height={bottom - y(point.needs_review)} rx="2" />
-              <rect x={x(index)} y={top} width={slot / 2} height={bottom - top + 6} fill="transparent" />
-            </g>
-          </>)}
-          {(index % labelStep === 0 || index === points.length - 1) &&
-            <text x={x(index)} y={bottom + 21} textAnchor="middle">{axisLabel(point)}</text>}
-        </g>)}
+        {comparison && observed.length > 1 && decisionSeries.map(({ field, tone }) =>
+          <polyline key={field} className={`chart-line chart-series-${tone}`} points={coordinates(field)} />
+        )}
+        {points.map((point, index) => {
+          const combined = point.automatic + point.needs_review;
+          return <g key={point.start_at ?? point.start_date}>
+            {!point.is_future && (!comparison ? <g className="chart-value" {...target(interval(point) + " · Tổng số ảnh", point.total)}>
+              <circle className="chart-point" cx={x(index)} cy={y(point.total)} r={points.length > 13 ? 3 : 4} />
+              {points.length <= 13 && <text className="chart-value-label" x={x(index)} y={y(point.total) - 12} textAnchor="middle">{point.total}</text>}
+              <rect x={x(index) - slot / 2} y={top - 14} width={slot} height={bottom - top + 25} fill="transparent" />
+            </g> : <g className="chart-value chart-comparison-value" {...target(interval(point), combined, combined, point)}>
+              <line className="chart-comparison-guide" x1={x(index)} x2={x(index)} y1={top} y2={bottom} />
+              {decisionSeries.map(({ field, tone, radius }) =>
+                <circle key={field} className={`chart-comparison-point chart-series-${tone}`}
+                  data-single-point={observed.length === 1 || undefined}
+                  cx={x(index)} cy={y(point[field])} r={radius} />
+              )}
+              <rect x={x(index) - slot / 2} y={top - 10} width={slot} height={bottom - top + 20} fill="transparent" />
+            </g>)}
+            {(index % labelStep === 0 || index === points.length - 1) &&
+              <text x={x(index)} y={bottom + 21} textAnchor="middle">{axisLabel(point)}</text>}
+          </g>;
+        })}
         <text className="chart-axis-label" x={width - 20} y={height - 5} textAnchor="end">Thời gian</text>
       </svg>
     </div>
@@ -265,7 +287,8 @@ export default function HistoryCharts() {
     <div className="chart-toolbar">
       <div className="chart-periods" role="group" aria-label="Khoảng thời gian biểu đồ">
         {periods.map(({ value, label }) => <Button key={value}
-          variant={value === period ? "primary" : "outline"} aria-pressed={value === period} onClick={() => setPeriod(value)}>
+          variant={value === period ? "primary" : "outline"} aria-pressed={value === period}
+          onClick={() => { interaction.hide(); setPeriod(value); }}>
           {label}
         </Button>)}
       </div>
@@ -278,8 +301,8 @@ export default function HistoryCharts() {
     {data && <>
       <PredictionSummary data={data} />
       <div className="trend-charts" aria-busy={loading}>
-        <TimeChart key={data.points[0]?.start_date + "-line"} points={data.points} variant="line" interaction={interaction} />
-        <TimeChart key={data.points[0]?.start_date + "-bars"} points={data.points} variant="bars" interaction={interaction} />
+        <TimeChart key={data.points[0]?.start_date + "-total"} points={data.points} variant="total" interaction={interaction} />
+        <TimeChart key={data.points[0]?.start_date + "-comparison"} points={data.points} variant="comparison" interaction={interaction} />
         <WasteChart key={data.points[0]?.start_date + "-waste"} counts={data.by_waste_type} interaction={interaction} />
         <WasteCharacteristics />
       </div>

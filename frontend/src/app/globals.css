@@ -219,13 +219,14 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .chart-area { fill: #edf4ff; opacity: .8; }
 .chart-line { fill: none; stroke: #2162ba; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart-point { fill: #2162ba; stroke: #fff; stroke-width: 1.2; }
-.analytics-chart-svg .chart-auto { fill: #368964; }
-.analytics-chart-svg .chart-review { fill: #c27c24; }
+.chart-series-auto { color: #368964; }
+.chart-series-review { color: #a86210; }
+.chart-line.chart-series-auto, .chart-line.chart-series-review { stroke: currentColor; }
+.chart-line.chart-series-review { stroke-dasharray: 4 4; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 5px 13px; min-height: 22px; margin-bottom: 6px; color: #425873; font-size: 1em; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.chart-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
-.chart-legend .chart-auto { background: #368964; }
-.chart-legend .chart-review { background: #c27c24; }
+.chart-legend .chart-swatch { width: 20px; border-top: 2px solid currentColor; }
+.chart-legend .chart-series-review { border-top-style: dashed; }
 .donut-layout { display: grid; grid-template-columns: minmax(0, 1fr) 135px; align-items: center; gap: 8px; flex: 1; min-height: 0; }
 .donut-chart-svg { display: block; width: 100%; height: 280px; min-width: 0; }
 .donut-track, .donut-segment { fill: none; stroke-width: 48; }
@@ -245,7 +246,16 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .chart-value { cursor: crosshair; }
 .chart-value:focus-visible { outline: none; }
 .chart-value:focus-visible .chart-point { stroke: #0b2149; stroke-width: 2; }
+.chart-comparison-guide { stroke: #93aac9; vector-effect: non-scaling-stroke; }
+.chart-comparison-point { fill: currentColor; stroke: #fff; stroke-width: 1; }
+.chart-comparison-guide, .chart-comparison-point { opacity: 0; }
+.chart-comparison-value:hover :is(.chart-comparison-guide, .chart-comparison-point),
+.chart-comparison-value:focus :is(.chart-comparison-guide, .chart-comparison-point),
+.chart-comparison-value[aria-describedby] .chart-comparison-point,
+.chart-comparison-point[data-single-point] { opacity: 1; }
 .chart-tooltip { position: fixed; z-index: 50; display: grid; gap: 3px; width: 230px; padding: 10px 13px; pointer-events: none; background: #fff; border: 1px solid #cbd9ed; border-radius: 10px; box-shadow: 0 5px 18px #153a6726; color: #193c69; font-size: 16px; }
+.chart-tooltip-auto { color: #24734e; }
+.chart-tooltip-review { color: #986017; }
 .chart-tooltip small { color: #61758f; font-size: 14px; }
 .waste-characteristics dl { display: grid; margin-top: 2px; }
 .waste-characteristics dl > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-top: 1px solid #e1eaf6; }
@@ -263,7 +273,9 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
   .chart-summary-card { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; }
   .chart-summary-card dt { font-size: 1rem; }
   .chart-summary-card dd { font-size: 1.7rem; }
-  .history-chart .analytics-chart-svg { min-width: 560px; }
+  .history-chart .analytics-chart-svg:not(.analytics-chart-comparison) { min-width: 560px; }
+  .analytics-chart-comparison text { font-size: 26px; }
+  .analytics-chart-comparison .chart-axis-label { font-size: 24px; }
   .donut-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .donut-chart-svg { height: 210px; }
   .donut-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }

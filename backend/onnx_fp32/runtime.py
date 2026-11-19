@@ -65,7 +65,7 @@ class Prepared:
     crop_strategy: str = "image_center"
 
 
-def decode(contents, mime=None, max_pixels=16_000_000):
+def decode(contents, mime=None, max_pixels=16_000_000, *, crop_box=None):
     with Image.open(BytesIO(contents), formats=["JPEG", "PNG", "WEBP"]) as image:
         actual = Image.MIME[image.format]
         if mime is not None and mime != actual:
@@ -79,10 +79,16 @@ def decode(contents, mime=None, max_pixels=16_000_000):
         # Match EXIF orientation and RGB conversion without holding several
         # full-resolution PIL images plus a full tobytes() copy simultaneously.
         ImageOps.exif_transpose(image, in_place=True)
-        rgb = np.empty((image.height, image.width, 3), dtype=np.uint8)
-        for y in range(0, image.height, 128):
-            end = min(y + 128, image.height)
-            with image.crop((0, y, image.width, end)) as stripe:
+        if crop_box is None:
+            left, top = 0, 0
+            width, height = image.size
+        else:
+            left, top, side = crop_box
+            width = height = side
+        rgb = np.empty((height, width, 3), dtype=np.uint8)
+        for y in range(0, height, 128):
+            end = min(y + 128, height)
+            with image.crop((left, top + y, left + width, top + end)) as stripe:
                 if stripe.mode == "RGB":
                     rgb[y:end] = np.asarray(stripe)
                 else:

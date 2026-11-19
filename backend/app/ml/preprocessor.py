@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, TYPE_CHECKING
+from typing import Callable, Literal, TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -60,33 +60,52 @@ def area_resize(image: tf.Tensor) -> tf.Tensor:
 class ImagePreprocessor:
     def __init__(self, max_pixels: int, smart_crop: bool) -> None:
         self.max_pixels = max_pixels
-        self.session = None
+        self._predict_mask: Callable[[np.ndarray], np.ndarray] | None = None
         if smart_crop:
             asset = Path(os.environ.get("U2NET_HOME") or Path.home() / ".u2net") / "u2netp.onnx"
             if not asset.is_file():
                 raise FileNotFoundError(f"SMART_CROP requires a local u2netp.onnx at {asset}.")
             from rembg import new_session, remove
-            self.session = new_session("u2netp", providers=["CPUExecutionProvider"])
-            self.remove = remove
+            session = new_session("u2netp", providers=["CPUExecutionProvider"])
+            self._predict_mask = lambda rgb: np.asarray(remove(rgb, session=session, only_mask=True))
 
     def _square(self, rgb: np.ndarray) -> tuple[int, int, int, bool]:
         height, width = rgb.shape[:2]
+        if self._predict_mask is not None and height != width:
+            preview, scale = self._subject_preview(rgb)
+            return self._subject_square(height, width, preview, scale)
         side = min(height, width)
-        if self.session is not None and height != width:
-            scale = min(1.0, 320.0 / max(height, width))
-            small = cv2.resize(
-                rgb, (max(1, round(width * scale)), max(1, round(height * scale))),
-                interpolation=cv2.INTER_AREA,
-            )
-            mask = self.remove(small, session=self.session, only_mask=True)
-            _, binary = cv2.threshold(np.asarray(mask), 10, 255, cv2.THRESH_BINARY)
-            contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            contour = max(contours, key=cv2.contourArea, default=None)
-            if contour is not None and cv2.contourArea(contour) > 20:
-                x, y, w, h = cv2.boundingRect(contour)
-                cx = int((x + w // 2) * width / small.shape[1])
-                cy = int((y + h // 2) * height / small.shape[0])
-                return max(0, min(cx - side // 2, width - side)), max(0, min(cy - side // 2, height - side)), side, True
+        return (width - side) // 2, (height - side) // 2, side, False
+
+    @staticmethod
+    def _subject_preview(rgb: np.ndarray) -> tuple[np.ndarray, float]:
+        height, width = rgb.shape[:2]
+        scale = min(1.0, 320.0 / max(height, width))
+        if scale == 1.0:
+            return rgb, scale
+        if min(height, width) * scale <= 0.5:
+            # OpenCV cannot round an extremely narrow image down to zero pixels.
+            size = (max(1, round(width * scale)), max(1, round(height * scale)))
+            return cv2.resize(rgb, size), scale
+        return cv2.resize(rgb, (0, 0), fx=scale, fy=scale), scale
+
+    def _subject_square(
+        self, height: int, width: int, preview: np.ndarray, scale: float,
+    ) -> tuple[int, int, int, bool]:
+        side = min(height, width)
+        predict_mask = self._predict_mask
+        assert predict_mask is not None
+        mask = predict_mask(preview)
+        _, binary = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contour = max(contours, key=cv2.contourArea, default=None)
+        if contour is not None and cv2.contourArea(contour) > 20:
+            x, y, w, h = cv2.boundingRect(contour)
+            cx = int((x + w // 2) / scale)
+            cy = int((y + h // 2) / scale)
+            left = max(0, min(cx - side // 2, width - side))
+            top = max(0, min(cy - side // 2, height - side))
+            return left, top, side, True
         return (width - side) // 2, (height - side) // 2, side, False
 
     def prepare(self, contents: bytes, claimed_type: str) -> PreparedImage:

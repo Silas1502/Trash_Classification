@@ -27,3 +27,7 @@ Mặc định `ADAPTIVE_ASSESSMENT_ENABLED=false`. `Tự động` yêu cầu c�
 | Health Check Path | `/api/v1/health` |
 
 `start-render.sh` giải mã và xác minh mô hình ONNX từ `model-parts/` trước khi khởi động FastAPI. Cấu hình tệp bí mật `onnx-model-key` và các biến Supabase, ImageKit, `CORS_ORIGINS` trong **Environment** của dịch vụ Render.
+
+Render mặc định dùng `SMART_CROP=true`. Với ảnh không vuông, U²-NetP định vị vật thể và backend đặt khung cắt theo đường bao lớn nhất như trong notebook. Nếu không tìm được đường bao đủ lớn, khung cắt nằm tại tâm ảnh. Ảnh vuông giữ nguyên khung. Vùng ảnh thu được được resize bằng OpenCV `INTER_AREA` về 320 × 320 trước khi chạy ConvNeXt-Tiny.
+
+Khi khởi động, backend tải trọng số U²-NetP chính thức và kiểm tra SHA-256 nếu thư mục `U2NET_HOME` chưa có file `u2netp.onnx`. Cũng có thể chuẩn bị sẵn file đúng checksum trong thư mục này. Nếu dịch vụ Render đã có `SMART_CROP=false` trong Environment, hãy đổi sang `true` để bật xử lý theo vật thể.

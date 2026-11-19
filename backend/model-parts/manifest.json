@@ -17,7 +17,7 @@
   ],
   "checkpoint_sha256": "866206ad9084f8feba2d67ccb550ac76965a8ce7316256ec0560a676f7b1e7a8",
   "checkpoint_bytes": 119190756,
-  "thresholds_sha256": "e6d09feca9f0377b9611dc513e01cce9e7684668ab94d6206010e95ac0a0b941",
+  "thresholds_sha256": "b8d5d8e734f9920bb26dbdb0cb39fa119f16681673d7d788fde1768d23d79872",
   "spatial_layer": "convnext_tiny_stage_3_block_2_identity",
   "converter_lowerings": {
     "Erfc(x)": "1 - Erf(x)",

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from time import perf_counter
 
+import cv2
 import numpy as np
 
 from PIL import Image, UnidentifiedImageError
@@ -14,6 +15,10 @@ from app.ml.preprocessor import ImagePreprocessor, InvalidImage, PreparedImage
 from app.ml.types import Explainability, InferenceResult
 
 from .runtime import Runtime, area_resize, decode, overlay_jpeg
+from .u2netp import U2NetP
+
+
+LARGE_RGB_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -24,8 +29,6 @@ class OnnxBundle:
 
 
 def load_model(settings, class_labels):
-    if settings.smart_crop:
-        raise ValueError("The validated ONNX experiment requires SMART_CROP=false.")
     directory = Path(os.environ.get("ONNX_MODEL_DIR", Path(__file__).with_name("artifacts")))
     runtime = Runtime(directory, threads=int(os.environ.get("ONNX_THREADS", "2")))
     if tuple(runtime.manifest["labels"]) != tuple(class_labels):
@@ -38,17 +41,30 @@ def load_model(settings, class_labels):
 
 class OnnxPreprocessor(ImagePreprocessor):
     def __init__(self, max_pixels, smart_crop):
+        super().__init__(max_pixels, smart_crop=False)
         if smart_crop:
-            raise ValueError("SMART_CROP is not part of this ONNX validation.")
-        super().__init__(max_pixels, smart_crop)
+            self._predict_mask = U2NetP()
 
     def prepare(self, contents, claimed_type):
         try:
             rgb, mime, extension = decode(contents, claimed_type, self.max_pixels)
         except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError) as exc:
             raise InvalidImage(str(exc) or "Không đọc được ảnh JPEG, PNG hoặc WebP hợp lệ.") from exc
-        x, y, side, _ = self._square(rgb)
-        return PreparedImage(area_resize(rgb[y:y + side, x:x + side]), (x, y, side), "image_center", mime, extension)
+        height, width = rgb.shape[:2]
+        if self._predict_mask is not None and height != width and rgb.nbytes >= LARGE_RGB_BYTES:
+            # Release the full RGB image before U²-NetP allocates its activations.
+            preview, scale = self._subject_preview(rgb)
+            del rgb
+            x, y, side, found = self._subject_square(height, width, preview, scale)
+            crop, _, _ = decode(contents, claimed_type, self.max_pixels, crop_box=(x, y, side))
+        else:
+            x, y, side, found = self._square(rgb)
+            crop = rgb[y:y + side, x:x + side]
+        if self._predict_mask is not None:
+            pixels = cv2.resize(crop, (320, 320), interpolation=cv2.INTER_AREA).astype(np.float32)
+        else:
+            pixels = area_resize(crop)
+        return PreparedImage(pixels, (x, y, side), "subject_center" if found else "image_center", mime, extension)
 
 
 def classify_batch(model, images, settings, safety):

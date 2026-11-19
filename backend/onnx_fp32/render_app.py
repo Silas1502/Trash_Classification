@@ -45,10 +45,10 @@ def load_with_probe(settings, class_labels):
     if os.environ.get("ONNX_STARTUP_PROBE") == "1":
         processor = OnnxPreprocessor(settings.max_image_pixels, settings.smart_crop)
         safety = SafetyFilter.load(settings.thresholds_path)
-        for side, mode, fmt, mime in ((720, "RGB", "JPEG", "image/jpeg"),
-                                      (4000, "RGBA", "PNG", "image/png")):
-            with BytesIO() as stream, Image.new(mode, (side, side), "#617b9c") as image:
-                ImageDraw.Draw(image).rectangle((side // 4, side // 4, side * 3 // 4, side * 3 // 4), fill="#754445")
+        for width, height, mode, fmt, mime in ((720, 720, "RGB", "JPEG", "image/jpeg"),
+                                                (5000, 3200, "RGBA", "PNG", "image/png")):
+            with BytesIO() as stream, Image.new(mode, (width, height), "#617b9c") as image:
+                ImageDraw.Draw(image).rectangle((width // 8, height // 4, width // 2, height * 3 // 4), fill="#754445")
                 image.save(stream, format=fmt)
                 contents = stream.getvalue()
             started, cpu_started = perf_counter(), process_time()
@@ -56,7 +56,8 @@ def load_with_probe(settings, class_labels):
             prepared = processor.prepare(contents, mime)
             result, = classify_batch(model, [prepared], settings, safety)
             print("RENDER_ONNX " + json.dumps({
-                "stage": "prediction", "pixels": side * side, "format": fmt,
+                "stage": "prediction", "pixels": width * height, "format": fmt,
+                "crop_strategy": prepared.crop_strategy,
                 "wall_seconds": round(perf_counter() - started, 3),
                 "python_cpu_seconds": round(process_time() - cpu_started, 3),
                 "gradcam_bytes": len(result.xai.gradcam_jpeg),

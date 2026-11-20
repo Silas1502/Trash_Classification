@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 from time import perf_counter
-from typing import Annotated, Literal
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, File, Request, UploadFile
@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.db.storage import ImageObject
+from app.db.storage import MANUAL_PREDICTION_FOLDER, PREDICTION_FOLDERS_BY_LABEL, ImageObject
 from app.ml.types import DummyPredictor, InferenceResult
 from app.ml.preprocessor import IMAGE_TYPES, InvalidImage, PreparedImage
 from app.schemas.history import HistoryItem
@@ -22,7 +22,6 @@ from app.schemas.prediction import BatchError, BatchResult, PredictionMetadata, 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/predict", tags=["Prediction"])
 MIME_TYPES = {value[0] for value in IMAGE_TYPES.values()}
-Mode = Literal["single", "batch"]
 
 
 @dataclass(frozen=True)
@@ -90,25 +89,29 @@ def _compute(state, inputs: list[ImageInput]):
 
 
 async def _persist(
-    state, source: ImageInput, image: PreparedImage, output: InferenceResult, processing_time_ms: float, mode: Mode,
+    state, source: ImageInput, image: PreparedImage, output: InferenceResult, processing_time_ms: float,
 ) -> PredictionResponse:
     id = uuid4()
     now = datetime.now(timezone.utc)
+    decision = output.decision
     is_mock = isinstance(state.model, DummyPredictor)
     original_url = gradcam_url = energy_url = None
     if not is_mock:
         if output.xai is None:
             raise RuntimeError("Missing explanation for a real model prediction.")
+        category = MANUAL_PREDICTION_FOLDER
+        if decision.decision == "Tu_Dong_Gap":
+            category = PREDICTION_FOLDERS_BY_LABEL.get(decision.waste_type, MANUAL_PREDICTION_FOLDER)
         day = now.strftime("%Y/%m/%d")
+        prefix = f"uploads/{category}/{day}/{id}"
         stem = PurePosixPath(source.file_name).stem or "image"
         objects = (
-            ImageObject(f"uploads/{mode}/{day}/{id}_{stem}{image.extension}", source.contents, image.mime_type),
-            ImageObject(f"uploads/xai/{day}/{id}_gradcam_overlay.jpg", output.xai.gradcam_jpeg, "image/jpeg"),
-            ImageObject(f"uploads/xai/{day}/{id}_spatial_energy_overlay.jpg", output.xai.spatial_energy_jpeg, "image/jpeg"),
+            ImageObject(f"{prefix}_original_{stem}{image.extension}", source.contents, image.mime_type),
+            ImageObject(f"{prefix}_gradcam_overlay.jpg", output.xai.gradcam_jpeg, "image/jpeg"),
+            ImageObject(f"{prefix}_spatial_energy_overlay.jpg", output.xai.spatial_energy_jpeg, "image/jpeg"),
         )
         async with state.storage_slots:
             original_url, gradcam_url, energy_url = await run_in_threadpool(state.storage.upload_images, objects)
-    decision = output.decision
     result = PredictionResponse(
         id=id, file_name=source.file_name, image_url=original_url, xai_overlay_url=gradcam_url,
         xai_energy_overlay_url=energy_url, waste_type=decision.waste_type,
@@ -152,7 +155,7 @@ async def predict_single(request: Request, file: Annotated[UploadFile, File()]) 
         results, errors = await run_in_threadpool(_compute, state, [source])
     if errors:
         raise ApiError(400, errors[0].code, errors[0].message)
-    return await _persist(state, *results[0], "single")
+    return await _persist(state, *results[0])
 
 
 @router.post("/batch", response_model=BatchResult)
@@ -169,7 +172,7 @@ async def predict_batch(request: Request, files: Annotated[list[UploadFile], Fil
 
     async def save(source: ImageInput, image: PreparedImage, prediction: InferenceResult, processing_time_ms: float):
         try:
-            return await _persist(state, source, image, prediction, processing_time_ms, "batch")
+            return await _persist(state, source, image, prediction, processing_time_ms)
         except ApiError as exc:
             return BatchError(index=source.index, file_name=source.file_name, code=exc.code, message=exc.message)
 

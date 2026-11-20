@@ -48,6 +48,26 @@ class ImageDeletionTests(unittest.TestCase):
         self.assertCountEqual(deletions, ["0", "1", "2"])
         self.assertEqual(files, {})
 
+    def test_deletes_new_folder_images_and_legacy_batch_images(self):
+        new_names = ("original_ảnh thử.jpg", "gradcam_overlay.jpg", "spatial_energy_overlay.jpg")
+        for folder in ("plastic", "paper", "metal", "glass", "manual", "batch"):
+            with self.subTest(folder=folder):
+                names = new_names if folder != "batch" else ("ảnh thử.jpg",)
+                paths = [f"/uploads/{folder}/2026/11/18/{ID}_{name}" for name in names]
+                files = {str(index): path for index, path in enumerate(paths)}
+                assets = [{"fileId": file_id, "filePath": path, "type": "file"} for file_id, path in files.items()]
+                deletions = []
+
+                def handle(request):
+                    if request.method == "GET":
+                        self.assertEqual(request.url.params["path"], f"/uploads/{folder}/2026/11/18/")
+                        return httpx.Response(200, json=assets)
+                    deletions.append(request.url.path.rsplit("/", 1)[1])
+                    return httpx.Response(204)
+
+                self.make_storage(handle).delete_prediction_images(ID, [BASE + path for path in paths])
+                self.assertCountEqual(deletions, files)
+
     def test_validates_all_urls_before_any_network_or_delete(self):
         called = Mock(side_effect=AssertionError("Must not touch ImageKit"))
         storage = self.make_storage(called)
@@ -57,6 +77,7 @@ class ImageDeletionTests(unittest.TestCase):
             BASE + PATHS[0].replace("/single/", "/other/"),
             BASE + PATHS[0].replace("_ảnh thử.jpg", "_%2Fother.jpg"),
             BASE + PATHS[1].replace("_gradcam_overlay.jpg", "_unrelated.jpg"),
+            BASE + PATHS[1].replace("/xai/", "/manual/").replace("_gradcam_overlay.jpg", "_unrelated.jpg"),
         ]
         for url in invalid:
             with self.subTest(url=url), self.assertRaises(ValueError):

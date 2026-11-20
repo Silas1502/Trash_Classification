@@ -9,9 +9,14 @@ from imagekitio import ImageKit, NotFoundError
 
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.db.storage import ImageObject
+from app.db.storage import MANUAL_PREDICTION_FOLDER, PREDICTION_FOLDERS_BY_LABEL, ImageObject
 
 logger = logging.getLogger(__name__)
+PREDICTION_FOLDERS_PATTERN = "|".join(
+    map(re.escape, (*PREDICTION_FOLDERS_BY_LABEL.values(), MANUAL_PREDICTION_FOLDER))
+)
+UPLOAD_DATE = r"\d{4}/\d{2}/\d{2}"
+XAI_FILENAME = r"(?:gradcam|spatial_energy)_overlay\.jpg"
 
 
 class ImageKitStorage:
@@ -35,10 +40,16 @@ class ImageKitStorage:
             raise
 
     def delete_prediction_images(self, prediction_id: str, urls: Sequence[str]) -> None:
-        """Resolve legacy URL-only records to exact fileIds; retries are idempotent."""
+        """Resolve stored ImageKit URLs to exact fileIds; retries are idempotent."""
         record_id = str(UUID(prediction_id))
         endpoint = urlsplit(self.url_endpoint)
         prefix = endpoint.path.rstrip("/") + "/"
+        filename_prefix = rf"{UPLOAD_DATE}/{re.escape(record_id)}_"
+        pattern = re.compile(
+            rf"/uploads/(?:(?:single|batch)/{filename_prefix}[^/]+"
+            rf"|xai/{filename_prefix}{XAI_FILENAME}"
+            rf"|(?:{PREDICTION_FOLDERS_PATTERN})/{filename_prefix}(?:original_[^/]+|{XAI_FILENAME}))"
+        )
         paths: set[str] = set()
         # Validate every URL before deleting anything, including the record's UUID.
         for url in urls:
@@ -46,13 +57,8 @@ class ImageKitStorage:
             if (parsed.scheme, parsed.netloc) != (endpoint.scheme, endpoint.netloc) or not parsed.path.startswith(prefix):
                 raise ValueError("Cleanup URL does not belong to configured ImageKit endpoint")
             path = "/" + unquote(parsed.path[len(prefix):])
-            pattern = rf"/uploads/(single|batch|xai)/\d{{4}}/\d{{2}}/\d{{2}}/{re.escape(record_id)}_[^/]+"
-            if not re.fullmatch(pattern, path) or "\\" in path:
+            if not pattern.fullmatch(path) or "\\" in path:
                 raise ValueError("Cleanup path does not belong to deleted prediction")
-            if "/xai/" in path and path.rsplit("/", 1)[1] not in {
-                f"{record_id}_gradcam_overlay.jpg", f"{record_id}_spatial_energy_overlay.jpg",
-            }:
-                raise ValueError("Unexpected XAI cleanup file name")
             paths.add(path)
 
         client = self.client.with_options(timeout=10, max_retries=0)

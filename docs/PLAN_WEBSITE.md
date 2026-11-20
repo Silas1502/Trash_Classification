@@ -259,9 +259,9 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
 {
   "id": "c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889",
   "file_name": "plastic_bottle_01.jpg",
-  "image_url": "https://ik.imagekit.io/example-id/uploads/plastic/2026/11/16/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_original_plastic_bottle_01.jpg",
-  "xai_overlay_url": "https://ik.imagekit.io/example-id/uploads/plastic/2026/11/16/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_gradcam_overlay.jpg",
-  "xai_energy_overlay_url": "https://ik.imagekit.io/example-id/uploads/plastic/2026/11/16/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_spatial_energy_overlay.jpg",
+  "image_url": "https://ik.imagekit.io/example-id/uploads/plastic/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_original_plastic_bottle_01.jpg",
+  "xai_overlay_url": "https://ik.imagekit.io/example-id/uploads/xai/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_gradcam_overlay.jpg",
+  "xai_energy_overlay_url": "https://ik.imagekit.io/example-id/uploads/xai/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_spatial_energy_overlay.jpg",
   "is_mock": false,
   "waste_type": "Nhựa",
   "confidence": 90.0,
@@ -294,7 +294,7 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
 | # | Yêu cầu | Chi tiết kỹ thuật | Mức độ |
 |---|---|---|---|
 | **D1** | Cấu hình ImageKit | Thiết lập `IMAGEKIT_PUBLIC_KEY`, `IMAGEKIT_PRIVATE_KEY` và `IMAGEKIT_URL_ENDPOINT` ở backend. Render hiện lưu ảnh bằng ImageKit. | Bắt buộc |
-| **D2** | Module kết nối Cloud Storage (`imagekit_storage.py`) | Với cả hai chế độ dự đoán, backend lưu ảnh gốc và hai ảnh XAI cùng thư mục ngày trong `/uploads/{nhóm}/YYYY/MM/DD/`. Luồng tự động dùng `plastic`, `paper`, `metal` hoặc `glass` theo nhãn dự đoán. Luồng thủ công dùng `manual`. Có adapter Supabase Storage dự phòng khi đã cấu hình Supabase và thiếu cấu hình ImageKit. | Bắt buộc |
+| **D2** | Module kết nối Cloud Storage (`imagekit_storage.py`) | Với cả hai chế độ dự đoán, backend lưu ảnh gốc trực tiếp trong `uploads/plastic/`, `uploads/paper/`, `uploads/metal/`, `uploads/glass/` hoặc `uploads/manual/`. Hai ảnh giải thích được lưu riêng trong `uploads/xai/`. Tên tệp có mã dự đoán để tránh trùng và giữ liên kết với lịch sử. Có adapter Supabase Storage dự phòng khi đã cấu hình Supabase và thiếu cấu hình ImageKit. | Bắt buộc |
 | **D3** | Cấu hình Supabase PostgreSQL | Dùng bảng `prediction_logs` để đọc, lọc, ghi và xuất kết quả. Biến kết nối được đặt ở backend. | Bắt buộc |
 | **D4** | Thiết kế bảng `prediction_logs` | Lưu kết quả phân loại, hai chốt, quyết định, thời gian, metadata, `is_mock`, `image_url`, `xai_overlay_url` và `xai_energy_overlay_url`. Bản ghi mới lưu hai lớp đứng đầu trong `metadata.top_predictions`. | Bắt buộc |
 | **D5** | Thống kê phiên xử lý nhiều ảnh | API trả `batch_id`, `total_images`, `processed_images`, `pending_images`, `succeeded_images`, `failed_images`, `completion_rate`, `results` và `errors`. Supabase lưu lịch sử theo từng ảnh. | Nâng cao |
@@ -307,9 +307,9 @@ Bản chạy trên Render dùng pipeline ONNX chuyển từ mô hình ConvNeXt-T
 {
   "id": "c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889",
   "file_name": "plastic_bottle_01.jpg",
-  "image_url": "https://ik.imagekit.io/example-id/uploads/plastic/2026/11/16/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_original_plastic_bottle_01.jpg",
-  "xai_overlay_url": "https://ik.imagekit.io/example-id/uploads/plastic/2026/11/16/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_gradcam_overlay.jpg",
-  "xai_energy_overlay_url": "https://ik.imagekit.io/example-id/uploads/plastic/2026/11/16/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_spatial_energy_overlay.jpg",
+  "image_url": "https://ik.imagekit.io/example-id/uploads/plastic/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_original_plastic_bottle_01.jpg",
+  "xai_overlay_url": "https://ik.imagekit.io/example-id/uploads/xai/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_gradcam_overlay.jpg",
+  "xai_energy_overlay_url": "https://ik.imagekit.io/example-id/uploads/xai/c1f7b0a8-5d23-4e89-a6f1-3d7120a4b889_spatial_energy_overlay.jpg",
   "is_mock": false,
   "waste_type": "Nhựa",
   "confidence": 90.0,

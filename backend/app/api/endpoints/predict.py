@@ -102,13 +102,11 @@ async def _persist(
         category = MANUAL_PREDICTION_FOLDER
         if decision.decision == "Tu_Dong_Gap":
             category = PREDICTION_FOLDERS_BY_LABEL.get(decision.waste_type, MANUAL_PREDICTION_FOLDER)
-        day = now.strftime("%Y/%m/%d")
-        prefix = f"uploads/{category}/{day}/{id}"
         stem = PurePosixPath(source.file_name).stem or "image"
         objects = (
-            ImageObject(f"{prefix}_original_{stem}{image.extension}", source.contents, image.mime_type),
-            ImageObject(f"{prefix}_gradcam_overlay.jpg", output.xai.gradcam_jpeg, "image/jpeg"),
-            ImageObject(f"{prefix}_spatial_energy_overlay.jpg", output.xai.spatial_energy_jpeg, "image/jpeg"),
+            ImageObject(f"uploads/{category}/{id}_original_{stem}{image.extension}", source.contents, image.mime_type),
+            ImageObject(f"uploads/xai/{id}_gradcam_overlay.jpg", output.xai.gradcam_jpeg, "image/jpeg"),
+            ImageObject(f"uploads/xai/{id}_spatial_energy_overlay.jpg", output.xai.spatial_energy_jpeg, "image/jpeg"),
         )
         async with state.storage_slots:
             original_url, gradcam_url, energy_url = await run_in_threadpool(state.storage.upload_images, objects)

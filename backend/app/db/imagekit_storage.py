@@ -44,11 +44,13 @@ class ImageKitStorage:
         record_id = str(UUID(prediction_id))
         endpoint = urlsplit(self.url_endpoint)
         prefix = endpoint.path.rstrip("/") + "/"
-        filename_prefix = rf"{UPLOAD_DATE}/{re.escape(record_id)}_"
+        file_prefix = rf"{re.escape(record_id)}_"
+        dated_prefix = rf"{UPLOAD_DATE}/{file_prefix}"
         pattern = re.compile(
-            rf"/uploads/(?:(?:single|batch)/{filename_prefix}[^/]+"
-            rf"|xai/{filename_prefix}{XAI_FILENAME}"
-            rf"|(?:{PREDICTION_FOLDERS_PATTERN})/{filename_prefix}(?:original_[^/]+|{XAI_FILENAME}))"
+            rf"/uploads/(?:(?:single|batch)/{dated_prefix}[^/]+"
+            rf"|xai/(?:{UPLOAD_DATE}/)?{file_prefix}{XAI_FILENAME}"
+            rf"|(?:{PREDICTION_FOLDERS_PATTERN})/(?:{UPLOAD_DATE}/)?{file_prefix}original_[^/]+"
+            rf"|(?:{PREDICTION_FOLDERS_PATTERN})/{dated_prefix}{XAI_FILENAME})"
         )
         paths: set[str] = set()
         # Validate every URL before deleting anything, including the record's UUID.

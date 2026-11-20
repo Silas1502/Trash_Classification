@@ -1,6 +1,5 @@
 import asyncio
 import unittest
-from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -15,7 +14,7 @@ from app.ml.types import Explainability, InferenceResult
 
 
 class PredictionStorageTests(unittest.TestCase):
-    def test_single_and_batch_store_all_three_images_by_label_or_review_decision(self):
+    def test_single_and_batch_store_originals_by_group_and_xai_separately(self):
         safety = SafetyFilter.load(Path(__file__).resolve().parents[1] / "app/core/safety_thresholds.json")
         cases = {
             b"glass": ([0.97, 0.01, 0.01, 0.01], "Thủy tinh", "glass"),
@@ -57,16 +56,14 @@ class PredictionStorageTests(unittest.TestCase):
 
         def check_result(result, contents):
             _, label, category = cases[contents]
-            date = datetime.fromisoformat(result["created_at"]).strftime("%Y/%m/%d")
-            prefix = f"uploads/{category}/{date}/{result['id']}"
             self.assertEqual(result["waste_type"], label)
             self.assertEqual(result["pipeline_type"], "Thủ công" if category == "manual" else "Tự động")
-            for field, suffix, data in (
-                ("image_url", "original_gradcam_overlay.jpg", contents),
-                ("xai_overlay_url", "gradcam_overlay.jpg", b"gradcam"),
-                ("xai_energy_overlay_url", "spatial_energy_overlay.jpg", b"energy"),
+            for field, folder, suffix, data in (
+                ("image_url", category, "original_gradcam_overlay.jpg", contents),
+                ("xai_overlay_url", "xai", "gradcam_overlay.jpg", b"gradcam"),
+                ("xai_energy_overlay_url", "xai", "spatial_energy_overlay.jpg", b"energy"),
             ):
-                key = f"{prefix}_{suffix}"
+                key = f"uploads/{folder}/{result['id']}_{suffix}"
                 self.assertEqual(result[field], base + key)
                 self.assertEqual(uploaded[key], data)
 

@@ -9,7 +9,7 @@ from imagekitio import ImageKit, NotFoundError
 
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.db.storage import MANUAL_PREDICTION_FOLDER, PREDICTION_FOLDERS_BY_LABEL, ImageObject
+from app.db.storage import MANUAL_PREDICTION_FOLDER, PREDICTION_FOLDERS_BY_LABEL, ImageObject, prediction_tag
 
 logger = logging.getLogger(__name__)
 PREDICTION_FOLDERS_PATTERN = "|".join(
@@ -17,6 +17,10 @@ PREDICTION_FOLDERS_PATTERN = "|".join(
 )
 UPLOAD_DATE = r"\d{4}/\d{2}/\d{2}"
 XAI_FILENAME = r"(?:gradcam|spatial_energy)_overlay\.jpg"
+NUMBERED_PATH = re.compile(
+    rf"/uploads/(?:(?P<folder>{PREDICTION_FOLDERS_PATTERN})/(?P=folder)_[0-9]{{3,}}\.(?:jpg|png|webp)"
+    rf"|xai/(?:{PREDICTION_FOLDERS_PATTERN})_[0-9]{{3,}}_{XAI_FILENAME})"
+)
 
 
 class ImageKitStorage:
@@ -52,19 +56,22 @@ class ImageKitStorage:
             rf"|(?:{PREDICTION_FOLDERS_PATTERN})/(?:{UPLOAD_DATE}/)?{file_prefix}original_[^/]+"
             rf"|(?:{PREDICTION_FOLDERS_PATTERN})/{dated_prefix}{XAI_FILENAME})"
         )
-        paths: set[str] = set()
-        # Validate every URL before deleting anything, including the record's UUID.
+        paths: dict[str, bool] = {}
         for url in urls:
             parsed = urlsplit(url)
             if (parsed.scheme, parsed.netloc) != (endpoint.scheme, endpoint.netloc) or not parsed.path.startswith(prefix):
                 raise ValueError("Cleanup URL does not belong to configured ImageKit endpoint")
             path = "/" + unquote(parsed.path[len(prefix):])
-            if not pattern.fullmatch(path) or "\\" in path:
+            numbered = NUMBERED_PATH.fullmatch(path) is not None
+            if "\\" in path or not (numbered or pattern.fullmatch(path)):
                 raise ValueError("Cleanup path does not belong to deleted prediction")
-            paths.add(path)
+            paths[path] = numbered
 
         client = self.client.with_options(timeout=10, max_retries=0)
-        for path in sorted(paths):
+        file_ids = []
+        # Numbered names no longer contain the UUID. Verify ownership before deleting any files.
+        expected_tag = prediction_tag(record_id)
+        for path, numbered in sorted(paths.items()):
             folder, name = path.rsplit("/", 1)
             skip = 0
             while True:
@@ -74,14 +81,18 @@ class ImageKitStorage:
                 )
                 match = next((asset for asset in assets if getattr(asset, "file_path", None) == path), None)
                 if match is not None:
-                    try:
-                        client.files.delete(match.file_id)
-                    except NotFoundError:
-                        pass  # Another attempt already removed this exact file.
+                    if numbered and expected_tag not in (match.tags or ()):
+                        raise ValueError("ImageKit file does not belong to deleted prediction")
+                    file_ids.append(match.file_id)
                     break
                 if len(assets) < 100:
                     break  # Missing files are already clean.
                 skip += len(assets)
+        for file_id in file_ids:
+            try:
+                client.files.delete(file_id)
+            except NotFoundError:
+                pass  # Another attempt already removed this exact file.
 
     def upload_images(self, objects: Sequence[ImageObject]) -> list[str]:
         if not objects:
@@ -91,12 +102,14 @@ class ImageKitStorage:
             parts = item.key.rsplit("/", 1)
             folder = "/" + parts[0] if len(parts) > 1 else "/trash_classification"
             file_name = parts[1] if len(parts) > 1 else item.key
+            upload_options = {"tags": [item.ownership_tag]} if item.ownership_tag else {}
             resp = self.client.files.upload(
                 file=item.content,
                 file_name=file_name,
                 folder=folder,
                 use_unique_file_name=False,
-                overwrite_file=True,
+                overwrite_file=item.ownership_tag is None,
+                **upload_options,
             )
             return resp.url
 

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     imagekit_url_endpoint: str = ""
     imagekit_cleanup_token: SecretStr | None = Field(default=None, min_length=43)
     imagekit_cleanup_interval_seconds: int = Field(default=60, ge=10, le=3600)
+    imagekit_sequential_names: bool = False
 
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     max_upload_bytes: int = Field(default=8 * 1024**2, ge=1024, le=32 * 1024**2)
@@ -53,6 +54,11 @@ class Settings(BaseSettings):
                 self.supabase_url = self.supabase_url[:-len("/rest/v1")].rstrip("/")
         if self.max_batch_bytes < self.max_upload_bytes:
             raise ValueError("MAX_BATCH_BYTES phải lớn hơn hoặc bằng MAX_UPLOAD_BYTES.")
+        if self.imagekit_sequential_names and not (
+            self.supabase_url and self.supabase_key and self.imagekit_private_key
+            and self.imagekit_url_endpoint and self.imagekit_cleanup_token
+        ):
+            raise ValueError("IMAGEKIT_SEQUENTIAL_NAMES yêu cầu cấu hình Supabase, ImageKit và IMAGEKIT_CLEANUP_TOKEN.")
         return self
 
     @property

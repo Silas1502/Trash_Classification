@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.config import Settings
 from app.core.errors import ApiError
-from app.db.storage import MANUAL_PREDICTION_FOLDER, PREDICTION_FOLDERS_BY_LABEL, ImageObject
+from app.db.storage import MANUAL_PREDICTION_FOLDER, PREDICTION_FOLDERS_BY_LABEL, ImageObject, prediction_tag
 from app.ml.types import DummyPredictor, InferenceResult
 from app.ml.preprocessor import IMAGE_TYPES, InvalidImage, PreparedImage
 from app.schemas.history import HistoryItem
@@ -107,11 +107,20 @@ async def _persist(
         category = MANUAL_PREDICTION_FOLDER
         if decision.decision == "Tu_Dong_Gap":
             category = PREDICTION_FOLDERS_BY_LABEL.get(decision.waste_type, MANUAL_PREDICTION_FOLDER)
-        stem = PurePosixPath(source.file_name).stem or "image"
+        ownership_tag = None
+        xai_stem = str(id)
+        if state.settings.imagekit_sequential_names:
+            token = state.settings.imagekit_cleanup_token.get_secret_value()
+            number = await state.history.next_image_number(category, token)
+            original_stem = xai_stem = f"{category}_{number:03d}"
+            ownership_tag = prediction_tag(str(id))
+        else:
+            stem = PurePosixPath(source.file_name).stem or "image"
+            original_stem = f"{id}_original_{stem}"
         objects = (
-            ImageObject(f"uploads/{category}/{id}_original_{stem}{image.extension}", source.contents, image.mime_type),
-            ImageObject(f"uploads/xai/{id}_gradcam_overlay.jpg", output.xai.gradcam_jpeg, "image/jpeg"),
-            ImageObject(f"uploads/xai/{id}_spatial_energy_overlay.jpg", output.xai.spatial_energy_jpeg, "image/jpeg"),
+            ImageObject(f"uploads/{category}/{original_stem}{image.extension}", source.contents, image.mime_type, ownership_tag),
+            ImageObject(f"uploads/xai/{xai_stem}_gradcam_overlay.jpg", output.xai.gradcam_jpeg, "image/jpeg", ownership_tag),
+            ImageObject(f"uploads/xai/{xai_stem}_spatial_energy_overlay.jpg", output.xai.spatial_energy_jpeg, "image/jpeg", ownership_tag),
         )
         async with state.storage_slots:
             original_url, gradcam_url, energy_url = await run_in_threadpool(state.storage.upload_images, objects)

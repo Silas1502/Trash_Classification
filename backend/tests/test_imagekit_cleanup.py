@@ -7,6 +7,7 @@ from imagekitio import ImageKit
 
 from app.db.imagekit_cleanup import process_next_cleanup
 from app.db.imagekit_storage import ImageKitStorage
+from app.db.storage import ImageObject
 
 
 ID = "00000000-0000-4000-8000-000000000001"
@@ -101,11 +102,54 @@ class ImageDeletionTests(unittest.TestCase):
             BASE + PATHS[1].replace("/xai/", "/manual/").replace("_gradcam_overlay.jpg", "_unrelated.jpg"),
             BASE + PATHS[1].replace("/xai/2026/11/18/", "/manual/"),
             BASE + PATHS[1].replace("/xai/2026/11/18/", "/xai/").replace("_gradcam_overlay.jpg", "_original_image.jpg"),
+            BASE + "/uploads/plastic/paper_001.jpg",
+            BASE + "/uploads/xai/plastic_001.jpg",
         ]
         for url in invalid:
             with self.subTest(url=url), self.assertRaises(ValueError):
                 storage.delete_prediction_images(ID, [BASE + PATHS[0], url])
         called.assert_not_called()
+
+    def test_numbered_assets_require_a_matching_prediction_tag_before_any_deletion(self):
+        paths = [
+            "/uploads/plastic/plastic_001.webp",
+            "/uploads/xai/plastic_001_gradcam_overlay.jpg",
+            "/uploads/xai/plastic_001_spatial_energy_overlay.jpg",
+        ]
+        tag = f"prediction-{ID}"
+        assets = [{"fileId": str(i), "filePath": path, "type": "file", "tags": [tag]} for i, path in enumerate(paths)]
+        deleted = []
+
+        def handle(request):
+            if request.method == "GET":
+                return httpx.Response(200, json=assets)
+            deleted.append(request.url.path.rsplit("/", 1)[1])
+            return httpx.Response(204)
+
+        storage = self.make_storage(handle)
+        urls = [BASE + path for path in paths]
+        assets[-1]["tags"] = ["different-prediction"]
+        with self.assertRaisesRegex(ValueError, "does not belong"):
+            storage.delete_prediction_images(ID, urls)
+        self.assertEqual(deleted, [])
+        assets[-1]["tags"] = [tag]
+        storage.delete_prediction_images(ID, urls)
+        self.assertCountEqual(deleted, ["0", "1", "2"])
+
+    def test_numbered_upload_passes_ownership_tag_and_disables_overwrite(self):
+        tag = f"prediction-{ID}"
+
+        def handle(request):
+            self.assertEqual(request.method, "POST")
+            multipart = request.read()
+            self.assertIn(b'name="overwriteFile"\r\n\r\nfalse', multipart)
+            self.assertIn(b'name="useUniqueFileName"\r\n\r\nfalse', multipart)
+            self.assertIn(b'name="tags"\r\n\r\n' + tag.encode(), multipart)
+            return httpx.Response(200, json={"url": BASE + "/uploads/paper/paper_001.jpg"})
+
+        storage = self.make_storage(handle)
+        self.assertEqual(storage.upload_images([ImageObject("uploads/paper/paper_001.jpg", b"image", "image/jpeg", tag)]),
+                         [BASE + "/uploads/paper/paper_001.jpg"])
 
     def test_delete_404_is_success(self):
         def handle(request):

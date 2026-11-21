@@ -12,6 +12,7 @@ const otherId = "00000000-0000-4000-8000-000000000002";
 const urls = ["original", "gradcam", "energy"];
 const sql = (await readFile(new URL("../sql/imagekit_cleanup.sql", import.meta.url), "utf8"))
   .replaceAll("__TOKEN_SHA256__", createHash("sha256").update(token).digest("hex"));
+const serialSql = await readFile(new URL("../sql/imagekit_sequential_names.sql", import.meta.url), "utf8");
 const rows = async (query, params = []) => (await db.query(query, params)).rows;
 const count = async (table) => (await rows(`select count(*)::integer as n from ${table}`))[0].n;
 const asAnon = async (action) => {
@@ -21,6 +22,7 @@ const asAnon = async (action) => {
 const claim = (key = token) => rows("select * from public.imagekit_cleanup_claim($1)", [key]);
 const finish = (job, error = null) => rows("select public.imagekit_cleanup_finish($1, $2, $3, $4)", [token, job.id, job.lease_token, error]);
 const insert = (rowId, images = urls) => rows("insert into public.prediction_logs values ($1,$2,$3,$4)", [rowId, ...images]);
+const nextNumber = async (category, key = token) => Number((await rows("select public.imagekit_next_number($1, $2) as serial", [category, key]))[0].serial);
 
 try {
   await db.exec(`
@@ -86,7 +88,20 @@ try {
   await insert(id, [null, null, null]);
   await rows("delete from public.prediction_logs where id=$1", [id]);
   assert.equal(await count("imagekit_cleanup.jobs"), 0);
-  console.log("PASS: migration, rollback, permissions, DELETE/TRUNCATE, leases, retries, shared URLs, reinstall.");
+
+  await db.exec(serialSql);
+  await assert.rejects(asAnon(() => rows("select * from imagekit_cleanup.image_numbers")), /permission denied/);
+  await assert.rejects(asAnon(() => nextNumber("plastic", "wrong")), /Invalid cleanup token/);
+  await assert.rejects(asAnon(() => nextNumber("other")), /check constraint/);
+  assert.equal(await asAnon(() => nextNumber("plastic")), 1);
+  assert.equal(await asAnon(() => nextNumber("manual")), 1);
+  const numbers = await Promise.all(Array.from({ length: 12 }, () => nextNumber("plastic")));
+  assert.deepEqual(numbers.sort((a, b) => a - b), Array.from({ length: 12 }, (_, i) => i + 2));
+  await db.exec("truncate public.prediction_logs");
+  await db.exec(serialSql);
+  assert.equal(await asAnon(() => nextNumber("plastic")), 14);
+  assert.equal(await asAnon(() => nextNumber("manual")), 2);
+  console.log("PASS: cleanup migration, permissions, ownership of live URLs, retries, and persistent numbering by group.");
 } finally {
   await db.close();
 }

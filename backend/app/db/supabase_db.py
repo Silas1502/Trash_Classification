@@ -52,6 +52,19 @@ class SupabaseHistory:
             logger.warning("Supabase insert failed: %s", exc)
             raise ApiError(503, "database_unavailable", "Không thể ghi lịch sử vào Supabase lúc này.") from exc
 
+    async def next_image_number(self, category: str, token: str) -> int:
+        def allocate() -> int:
+            number = self.client.rpc("imagekit_next_number", {"p_group": category, "p_token": token}).execute().data
+            if type(number) is not int or number < 1:
+                raise ValueError("Expected a positive image number")
+            return number
+
+        try:
+            return await asyncio.to_thread(allocate)
+        except Exception as exc:
+            logger.warning("Supabase image numbering failed: %s", type(exc).__name__)
+            raise ApiError(503, "database_unavailable", "Không thể cấp số thứ tự cho ảnh lúc này.") from exc
+
     async def list(self, query: HistoryQuery) -> tuple[list[HistoryItem], int]:
         def _sync_list():
             q = self.client.table("prediction_logs").select("*", count="exact")

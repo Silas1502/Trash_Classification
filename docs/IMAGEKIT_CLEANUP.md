@@ -40,6 +40,12 @@ Trong Render **Environment**, thêm `IMAGEKIT_CLEANUP_TOKEN` với đúng giá t
 
 Triển khai phiên bản backend có `app/db/imagekit_cleanup.py`. Local cần khởi động lại backend để đọc token mới. Có thể điều chỉnh chu kỳ bằng `IMAGEKIT_CLEANUP_INTERVAL_SECONDS` (mặc định 60).
 
+### Đặt tên ảnh theo nhóm và số thứ tự
+
+Sau khi cấu hình xóa đồng bộ, chạy `backend/sql/imagekit_sequential_names.sql` trong SQL Editor của Supabase. Triển khai backend có hỗ trợ tên mới và đặt `IMAGEKIT_SEQUENTIAL_NAMES=true` trong môi trường backend. Cơ chế này dùng token đã cấu hình cho xóa đồng bộ và cấp số riêng cho từng nhóm `plastic`, `paper`, `metal`, `glass`, `manual`.
+
+Ví dụ, một dự đoán tự động nhãn Nhựa lưu ảnh gốc tại `uploads/plastic/plastic_001.jpg` và hai ảnh giải thích tại `uploads/xai/plastic_001_gradcam_overlay.jpg` và `uploads/xai/plastic_001_spatial_energy_overlay.jpg`. Mỗi số đã cấp chỉ dùng một lần. Nếu một lượt tải ảnh lên thất bại, dãy số có thể bị ngắt quãng. Tên cũ vẫn được lịch sử và chức năng xóa đồng bộ hỗ trợ.
+
 ### 4. Kiểm tra
 
 Tạo một dự đoán thử mới, ghi lại ba đường dẫn ảnh rồi xóa **đúng dòng thử đó** trong Supabase Table Editor. Khi backend đang chạy, đợi khoảng một chu kỳ và kiểm tra ba tệp đã biến mất khỏi ImageKit Media Library. Không dùng dữ liệu cần giữ cho phép thử này.

@@ -83,7 +83,7 @@ class UploadLimits:
 
 def _health(model: str, db: str, storage: str) -> dict:
     cloud_ok = db in ("connected", "not_configured") and storage in ("reachable", "not_configured")
-    is_healthy = model in ("loaded", "mock") and cloud_ok
+    is_healthy = model in ("loaded", "pending", "mock") and cloud_ok
     return {
         "status": "healthy" if is_healthy else "degraded",
         "model": model, "database": db, "storage": storage,
@@ -125,6 +125,7 @@ def create_app(
     batch_classifier: BatchClassifier | None = None,
     model_loader: Callable | None = None,
     preprocessor_factory: Callable = ImagePreprocessor,
+    defer_model_load: bool = False,
 ) -> FastAPI:
     settings = settings or Settings()
 
@@ -137,9 +138,22 @@ def create_app(
         if model is None and loader is None:
             from app.ml.model_loader import load_model
             loader = load_model
-        state.model = model if model is not None else await run_in_threadpool(
-            loader, settings, state.safety.thresholds.classes.labels,
-        )
+        state.model = model
+
+        def load_model_when_needed():
+            # Prediction calls this after preprocessing, while holding the ML slot.
+            try:
+                loaded = loader(settings, state.safety.thresholds.classes.labels)
+            except Exception as exc:
+                logger.exception("Deferred prediction model failed to load")
+                state.health = _health("error", state.health["database"], state.health["storage"])
+                raise ApiError(503, "model_unavailable", "Chưa thể nạp mô hình phân loại. Hãy thử lại.") from exc
+            state.model = loaded
+            state.health = _health("loaded", state.health["database"], state.health["storage"])
+
+        state.load_model_when_needed = load_model_when_needed
+        if model is None and not defer_model_load:
+            state.model = await run_in_threadpool(loader, settings, state.safety.thresholds.classes.labels)
         classifier = batch_classifier
         if classifier is None:
             from app.ml.inference import classify_batch
@@ -166,7 +180,8 @@ def create_app(
                 cleanup.callback(state.storage.close)
 
             state.health = _health(
-                "mock" if isinstance(state.model, DummyPredictor) else "loaded",
+                "mock" if isinstance(state.model, DummyPredictor)
+                else "pending" if state.model is None and defer_model_load else "loaded",
                 "checking" if state.history else "not_configured",
                 "checking" if state.storage else "not_configured",
             )

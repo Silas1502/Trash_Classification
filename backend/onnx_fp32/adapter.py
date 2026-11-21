@@ -18,7 +18,7 @@ from .runtime import Runtime, area_resize, decode, overlay_jpeg
 from .u2netp import U2NetP
 
 
-LARGE_RGB_BYTES = 16 * 1024 * 1024
+LARGE_RGB_BYTES = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -28,9 +28,9 @@ class OnnxBundle:
     class_labels: tuple[str, ...]
 
 
-def load_model(settings, class_labels):
+def load_model(settings, class_labels, *, reclaim_memory=False):
     directory = Path(os.environ.get("ONNX_MODEL_DIR", Path(__file__).with_name("artifacts")))
-    runtime = Runtime(directory, threads=int(os.environ.get("ONNX_THREADS", "2")))
+    runtime = Runtime(directory, threads=int(os.environ.get("ONNX_THREADS", "2")), reclaim_memory=reclaim_memory)
     if tuple(runtime.manifest["labels"]) != tuple(class_labels):
         raise ValueError("ONNX label order disagrees with the configured safety thresholds.")
     if hashlib.sha256(settings.thresholds_path.read_bytes()).hexdigest() != runtime.manifest["thresholds_sha256"]:
@@ -40,10 +40,10 @@ def load_model(settings, class_labels):
 
 
 class OnnxPreprocessor(ImagePreprocessor):
-    def __init__(self, max_pixels, smart_crop):
+    def __init__(self, max_pixels, smart_crop, *, mask_size=320, reclaim_memory=False):
         super().__init__(max_pixels, smart_crop=False)
         if smart_crop:
-            self._predict_mask = U2NetP()
+            self._predict_mask = U2NetP(mask_size, reclaim_memory=reclaim_memory)
 
     def prepare(self, contents, claimed_type):
         try:

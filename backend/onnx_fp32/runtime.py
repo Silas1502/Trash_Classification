@@ -12,6 +12,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageOps
 
+from .memory import release_file_cache, trim_heap
+
 SIZE = 320
 
 
@@ -137,7 +139,7 @@ def overlay_jpeg(rgb, heat):
 
 
 class Runtime:
-    def __init__(self, directory=None, threads=2):
+    def __init__(self, directory=None, threads=2, *, reclaim_memory=False):
         import onnxruntime as ort
 
         directory = Path(directory or Path(__file__).with_name("artifacts"))
@@ -145,12 +147,15 @@ class Runtime:
         if self.manifest["precision"] != "float32":
             raise ValueError("This runtime requires the validated FP32 export.")
         for name in ("forward.onnx", "gradient.onnx"):
+            path = directory / name
             digest = hashlib.sha256()
-            with (directory / name).open("rb") as stream:
+            with path.open("rb") as stream:
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     digest.update(chunk)
             if digest.hexdigest() != self.manifest["files"][name]["sha256"]:
                 raise ValueError(f"ONNX artifact disagrees with manifest: {name}")
+            if reclaim_memory:
+                release_file_cache(path)
         options = ort.SessionOptions()
         options.intra_op_num_threads = threads
         options.inter_op_num_threads = 1
@@ -158,7 +163,13 @@ class Runtime:
         # Do not retain a large CPU arena after a request completes.
         options.enable_cpu_mem_arena = False
         self.forward = ort.InferenceSession(str(directory / "forward.onnx"), options, providers=["CPUExecutionProvider"])
+        if reclaim_memory:
+            release_file_cache(directory / "forward.onnx")
+            trim_heap()
         self.gradient = ort.InferenceSession(str(directory / "gradient.onnx"), options, providers=["CPUExecutionProvider"])
+        if reclaim_memory:
+            release_file_cache(directory / "gradient.onnx")
+            trim_heap()
         self.forward_names = [value.name for value in self.forward.get_outputs()]
         self.rgb_name = self.forward.get_inputs()[0].name
         self.gradient_names = [value.name for value in self.gradient.get_inputs()]

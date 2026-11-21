@@ -80,6 +80,11 @@ def _compute(state, inputs: list[ImageInput]):
             valid.append((source, image, preprocessing_ms))
     if not valid:
         return [], errors
+    if state.model is None:
+        started = perf_counter()
+        state.load_model_when_needed()
+        source, image, preprocessing_ms = valid[0]
+        valid[0] = source, image, preprocessing_ms + (perf_counter() - started) * 1000
     predictions = state.batch_classifier(state.model, [image for _, image, _ in valid], state.settings, state.safety)
     computed = [
         (source, image, output, round(preprocessing_ms + output.inference_time_ms + output.xai_time_ms, 2))

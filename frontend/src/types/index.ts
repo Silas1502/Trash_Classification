@@ -6,7 +6,7 @@ export type PipelineType = typeof pipelineTypes[number] | "Chưa thẩm định"
 
 export interface HealthCheckResponse {
   status: "healthy" | "degraded" | "error";
-  model: "loaded" | "mock" | "error";
+  model: "pending" | "loaded" | "mock" | "error";
   database: "connected" | "disconnected" | "checking" | "not_configured";
   storage: "reachable" | "unreachable" | "checking" | "not_configured";
 }

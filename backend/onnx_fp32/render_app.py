@@ -15,6 +15,11 @@ from app.core.safety_gate import SafetyFilter
 from app.main import create_app
 
 from .adapter import OnnxPreprocessor, classify_batch, load_model
+from .memory import release_file_cache, trim_heap
+
+
+MASK_SIZE = int(os.environ.get("U2NET_INPUT_SIZE", "256"))
+STARTUP_PROBE = os.environ.get("ONNX_STARTUP_PROBE") == "1"
 
 
 def counters() -> dict:
@@ -38,12 +43,15 @@ def counters() -> dict:
 
 def load_with_probe(settings, class_labels):
     started = perf_counter()
-    model = load_model(settings, class_labels)
+    trim_heap()
+    model = load_model(settings, class_labels, reclaim_memory=True)
+    trim_heap()
     print("RENDER_ONNX " + json.dumps({
         "stage": "loaded", "wall_seconds": round(perf_counter() - started, 3), **counters(),
     }), flush=True)
-    if os.environ.get("ONNX_STARTUP_PROBE") == "1":
-        processor = OnnxPreprocessor(settings.max_image_pixels, settings.smart_crop)
+    if STARTUP_PROBE:
+        processor = OnnxPreprocessor(settings.max_image_pixels, settings.smart_crop,
+                                     mask_size=MASK_SIZE, reclaim_memory=True)
         safety = SafetyFilter.load(settings.thresholds_path)
         for width, height, mode, fmt, mime in ((720, 720, "RGB", "JPEG", "image/jpeg"),
                                                 (5000, 3200, "RGBA", "PNG", "image/png")):
@@ -65,6 +73,18 @@ def load_with_probe(settings, class_labels):
                 "before": before, "after": counters(),
             }), flush=True)
     return model
+
+
+def load_preprocessor(max_pixels, smart_crop):
+    processor = OnnxPreprocessor(max_pixels, smart_crop, mask_size=MASK_SIZE, reclaim_memory=True)
+    directory = Path(os.environ.get("ONNX_MODEL_DIR", Path(__file__).with_name("artifacts")))
+    for name in ("forward.onnx", "gradient.onnx"):
+        release_file_cache(directory / name, sync=True)
+    trim_heap()
+    print("RENDER_ONNX " + json.dumps({
+        "stage": "preprocessor_ready", "u2net_input_size": MASK_SIZE if smart_crop else None, **counters(),
+    }), flush=True)
+    return processor
 
 
 class UploadMemoryLog:
@@ -90,7 +110,8 @@ class UploadMemoryLog:
 
 app = create_app(
     Settings(), batch_classifier=classify_batch, model_loader=load_with_probe,
-    preprocessor_factory=OnnxPreprocessor,
+    preprocessor_factory=load_preprocessor,
+    defer_model_load=not STARTUP_PROBE and os.environ.get("ONNX_DEFER_MODEL_LOAD", "1") == "1",
 )
 if os.environ.get("ONNX_UPLOAD_MEMORY_LOG") == "1":
     app.add_middleware(UploadMemoryLog)

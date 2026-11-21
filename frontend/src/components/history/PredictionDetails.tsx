@@ -14,7 +14,7 @@ export function PredictionDetails({ result, preview }: { result: PredictionRespo
   const recordedTime = processingTime ?? (metadata && metadata.inference_time_ms + metadata.xai_time_ms);
   const details = [
     { icon: Target, label: "Điểm an toàn kết hợp", value: <span>{result.composite_score == null ? "—" : percent(result.composite_score)}</span> },
-    { icon: CalendarDays, label: "Thời điểm dự đoán", value: <time dateTime={result.created_at}>{formatDate(result.created_at)}</time> },
+    { icon: CalendarDays, label: "Thời điểm phân loại", value: <time dateTime={result.created_at}>{formatDate(result.created_at)}</time> },
     ...(recordedTime == null ? [] : [{
       icon: Timer,
       label: processingTime == null ? "Thời gian suy luận và XAI" : "Thời gian xử lý",

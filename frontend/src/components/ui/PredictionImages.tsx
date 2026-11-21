@@ -20,7 +20,7 @@ export function PredictionImages({ original, heatmap, energy, comparison = false
 }) {
   const [view, setView] = useState<"original" | "heatmap" | "energy">("original");
   const images = {
-    original: { label: "Ảnh gốc", src: original, alt: "Ảnh gốc dùng để dự đoán" },
+    original: { label: "Ảnh gốc", src: original, alt: "Ảnh gốc dùng để phân loại" },
     heatmap: { label: "Bản đồ nhiệt Grad-CAM", src: heatmap, alt: "Ảnh phủ nhiệt Grad-CAM" },
     energy: { label: "Spatial Energy", src: energy, alt: "Ảnh phủ Spatial Energy" },
   };

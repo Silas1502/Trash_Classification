@@ -99,7 +99,7 @@ function TimeChart({ points, variant, interaction }: {
 }) {
   const { target } = interaction;
   const comparison = variant === "comparison";
-  const title = comparison ? "Tự động và cần kiểm tra theo thời gian" : "Số ảnh dự đoán theo thời gian";
+  const title = comparison ? "Tự động và cần kiểm tra theo thời gian" : "Số ảnh đã phân loại theo thời gian";
   const width = 700;
   const height = 280;
   const left = 54;
@@ -250,11 +250,11 @@ function WasteCharacteristics() {
 
 function PredictionSummary({ data }: { data: HistoryTrendsResponse }) {
   const cards = [
-    { label: "Số lượng ảnh dự đoán", value: data.points.reduce((sum, point) => sum + point.total, 0), tone: "blue", icon: Images },
+    { label: "Số lượng ảnh đã phân loại", value: data.points.reduce((sum, point) => sum + point.total, 0), tone: "blue", icon: Images },
     { label: "Số lượng ảnh phân loại tự động", value: data.points.reduce((sum, point) => sum + point.automatic, 0), tone: "green", icon: CircleCheck },
     { label: "Số lượng ảnh phân loại thủ công", value: data.points.reduce((sum, point) => sum + point.needs_review, 0), tone: "amber", icon: Hand },
   ];
-  return <dl className="chart-summary" aria-label="Tổng quan dự đoán">
+  return <dl className="chart-summary" aria-label="Tổng quan phân loại">
     {cards.map(({ label, value, tone, icon: Icon }) => <div className={"chart-summary-card summary-" + tone} key={label}>
       <dt><Icon aria-hidden />{label}</dt>
       <dd>{countFormat.format(value)}</dd>

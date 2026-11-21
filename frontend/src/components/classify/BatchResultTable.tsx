@@ -73,7 +73,7 @@ export default function BatchResultTable({ rows, busy }: { rows: BatchRow[]; bus
       }}><Download aria-hidden />Xuất CSV lượt xử lý</Button>
     </div>}
     <Notice>Nhấn vào một dòng để xem chi tiết kết quả.</Notice>
-    {selected && <Modal title={"result" in selected ? "Chi tiết phân loại" : "Chi tiết dự đoán"} wide={"result" in selected} onClose={() => setSelected(undefined)}>
+    {selected && <Modal title="Chi tiết phân loại" wide={"result" in selected} onClose={() => setSelected(undefined)}>
       {"result" in selected ? <PredictionDetails result={selected.result} preview={selected.url} /> : <div className="failed-detail">
         <Picture src={selected.url} alt={selected.file.name} className="result-picture" /><strong>{selected.file.name}</strong><p>{selected.error}</p>
       </div>}

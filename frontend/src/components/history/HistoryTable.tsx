@@ -29,7 +29,7 @@ export default function HistoryTable({ data, loading, error, activeId, onSelect,
     </div>
     <div className="table-frame">
       <table className="data-table history-table">
-        <thead><tr><th scope="col">STT</th><th scope="col">Tên file</th><th scope="col">Loại rác</th><th scope="col">Độ tin cậy</th><th scope="col">Luồng xử lý</th><th scope="col">Thời gian dự đoán</th></tr></thead>
+        <thead><tr><th scope="col">STT</th><th scope="col">Tên file</th><th scope="col">Loại rác</th><th scope="col">Độ tin cậy</th><th scope="col">Luồng xử lý</th><th scope="col">Thời điểm phân loại</th></tr></thead>
         <tbody>{!loading && !error && data?.items.map((item, index) => <tr className={activeId === item.id ? "selected" : undefined}
           key={item.id} onClick={event => {
             event.currentTarget.querySelector<HTMLButtonElement>(".row-trigger")?.focus({ preventScroll: true });
@@ -45,7 +45,7 @@ export default function HistoryTable({ data, loading, error, activeId, onSelect,
       </table>
       {loading ? <Skeleton rows={5} /> : error ? <Empty icon={List} title="Không tải được lịch sử">
         {error}<br /><Button variant="outline" onClick={onRetry}>Thử lại</Button>
-      </Empty> : (!data?.items.length && <Empty icon={List} title="Không có kết quả">Thử thay đổi bộ lọc hoặc thực hiện một dự đoán mới.</Empty>)}
+      </Empty> : (!data?.items.length && <Empty icon={List} title="Không có kết quả">Thử thay đổi bộ lọc hoặc phân loại ảnh mới.</Empty>)}
     </div>
     {Boolean(data?.items.length) && <Notice>Nhấn vào một dòng để xem chi tiết kết quả.</Notice>}
     {data && !loading && !error && <div className="history-footer">

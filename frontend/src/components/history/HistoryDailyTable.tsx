@@ -75,7 +75,7 @@ export default function HistoryDailyTable() {
       <p role="alert">{error}</p>
       <Button variant="outline" onClick={() => setRetry(value => value + 1)}>Thử tải lại số liệu</Button>
     </div> : data && <>
-      <div className="chart-scroll"><table className="data-table" aria-label="Số liệu dự đoán theo ngày">
+      <div className="chart-scroll"><table className="data-table" aria-label="Số liệu phân loại theo ngày">
         <thead><tr><th scope="col">Ngày</th><th scope="col">Tổng số ảnh</th><th scope="col">Tự động</th><th scope="col">Thủ công</th></tr></thead>
         <tbody>{data.points.map(point => <tr key={point.start_date}>
           <th scope="row">{displayDate(point.start_date)}</th>

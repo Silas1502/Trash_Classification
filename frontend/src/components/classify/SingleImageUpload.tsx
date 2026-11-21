@@ -133,7 +133,7 @@ export default function SingleImageUpload() {
           <Empty title="Chưa chọn ảnh">Ảnh đã chọn sẽ xuất hiện ở đây.</Empty>
         </div>}
         <div className="single-actions">
-          <Button disabled={!selection || locked} onClick={run}>{busy ? <LoaderCircle className="spin" aria-hidden /> : <Play className="play-icon" aria-hidden />}{busy ? "Đang dự đoán…" : "Bắt đầu dự đoán"}</Button>
+          <Button disabled={!selection || locked} onClick={run}>{busy ? <LoaderCircle className="spin" aria-hidden /> : <Play className="play-icon" aria-hidden />}{busy ? "Đang phân loại…" : "Bắt đầu phân loại"}</Button>
           <Button variant="outline" disabled={locked || !selection} onClick={() => { setSelection(undefined); setResult(undefined); }}><RefreshCw aria-hidden />Làm mới</Button>
         </div>
       </section>
@@ -148,6 +148,6 @@ export default function SingleImageUpload() {
         </Button>)}
       </div>
     </Modal>}
-    <Notice>Hỗ trợ dự đoán cho 1 ảnh mỗi lần.</Notice>
+    <Notice>Mỗi lượt phân loại một ảnh.</Notice>
   </div>;
 }

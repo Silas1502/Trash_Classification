@@ -38,7 +38,7 @@ export default function SingleImageResult({ result, busy }: { result?: Predictio
       </div>
       <PredictionComparison result={result} />
       <Notice><strong>Gợi ý:</strong> {result.suggestion}</Notice>
-    </> : <Empty icon={Target} title="Chưa có kết quả phân loại">Chọn một ảnh và bấm “Bắt đầu dự đoán” để xem loại rác và độ tin cậy.</Empty>}
+    </> : <Empty icon={Target} title="Chưa có kết quả phân loại">Chọn một ảnh và bấm “Bắt đầu phân loại” để xem loại rác và độ tin cậy.</Empty>}
   </section>;
 }
 

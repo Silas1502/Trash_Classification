@@ -6,7 +6,7 @@ import "@/app/globals.css";
 
 export const metadata: Metadata = {
   title: "Phân loại rác",
-  description: "Phân loại rác từ hình ảnh và tra cứu kết quả dự đoán.",
+  description: "Phân loại rác từ hình ảnh và tra cứu kết quả phân loại.",
   icons: { icon: "/recycling-logo.png" },
 };
 

@@ -8,7 +8,7 @@ import type { PredictionResponse } from "@/types";
 
 export default function SingleImageResult({ result, busy }: { result?: PredictionResponse; busy: boolean }) {
   return <section className="panel classify-card result-panel" aria-busy={busy}>
-    <PanelTitle icon={ChartNoAxesColumnIncreasing}>Kết quả dự đoán</PanelTitle>
+    <PanelTitle icon={ChartNoAxesColumnIncreasing}>Kết quả phân loại</PanelTitle>
     {busy ? <Skeleton /> : result ? <>
       <div className="result-hero">
         <span className="hero-icon"><Recycle aria-hidden /></span>
@@ -38,7 +38,7 @@ export default function SingleImageResult({ result, busy }: { result?: Predictio
       </div>
       <PredictionComparison result={result} />
       <Notice><strong>Gợi ý:</strong> {result.suggestion}</Notice>
-    </> : <Empty icon={Target} title="Chưa có kết quả dự đoán">Chọn một ảnh và bấm “Bắt đầu dự đoán” để xem loại rác và độ tin cậy.</Empty>}
+    </> : <Empty icon={Target} title="Chưa có kết quả phân loại">Chọn một ảnh và bấm “Bắt đầu dự đoán” để xem loại rác và độ tin cậy.</Empty>}
   </section>;
 }
 

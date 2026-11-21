@@ -11,7 +11,7 @@ router = APIRouter(tags=["System"])
 async def health(request: Request) -> Response:
     report = request.app.state.health
     # Trả về 200 OK khi mô hình đã nạp sẵn sàng (kể cả khi chưa cấu hình cloud storage lúc test local)
-    status_code = 200 if report.get("model") in ("loaded", "mock") and report.get("status") != "error" else 503
+    status_code = 200 if report.get("model") in ("loaded", "pending", "mock") and report.get("status") != "error" else 503
     if request.method == "HEAD":
         return Response(status_code=status_code, headers={"Cache-Control": "no-store"})
     return JSONResponse(report, status_code=status_code, headers={"Cache-Control": "no-store"})

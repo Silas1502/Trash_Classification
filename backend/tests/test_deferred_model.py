@@ -42,14 +42,18 @@ class DeferredModelTests(unittest.TestCase):
             app.state.storage = SimpleNamespace(
                 check=lambda: None, upload_images=lambda images: [f"https://example.invalid/{i}" for i in range(3)],
             )
-            self.assertEqual(client.get("/api/v1/health").json()["model"], "pending")
+            health = client.get("/api/v1/health")
+            self.assertEqual(health.status_code, 200)
+            self.assertEqual(health.json()["model"], "pending")
             endpoint = "/api/v1/predict/single"
             invalid = {"file": ("image.jpg", b"invalid", "image/jpeg")}
             valid = {"file": ("image.jpg", b"valid", "image/jpeg")}
             self.assertEqual(client.post(endpoint, files=invalid).status_code, 400)
             self.assertEqual(steps, [])
             self.assertEqual(client.post(endpoint, files=valid).status_code, 503)
-            self.assertEqual(client.get("/api/v1/health").json()["model"], "error")
+            health = client.get("/api/v1/health")
+            self.assertEqual(health.status_code, 503)
+            self.assertEqual(health.json()["model"], "error")
             self.assertEqual(client.post(endpoint, files=valid).status_code, 200)
             self.assertEqual(client.get("/api/v1/health").json()["model"], "loaded")
             self.assertEqual(client.post(endpoint, files=valid).status_code, 200)

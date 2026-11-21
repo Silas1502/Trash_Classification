@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ImageIcon } from "lucide-react";
+import { ZoomablePredictionImage } from "@/components/ui/ZoomablePredictionImage";
 import { cn } from "@/lib/utils";
 
 export function Picture({ src, alt, className }: { src?: string | null; alt: string; className?: string }) {
@@ -10,11 +11,12 @@ export function Picture({ src, alt, className }: { src?: string | null; alt: str
   return <img className={className} src={src} alt={alt} onError={() => setFailedSrc(src)} />;
 }
 
-export function PredictionImages({ original, heatmap, energy, comparison = false }: {
+export function PredictionImages({ original, heatmap, energy, comparison = false, zoomable = false }: {
   original?: string | null;
   heatmap?: string | null;
   energy?: string | null;
   comparison?: boolean;
+  zoomable?: boolean;
 }) {
   const [view, setView] = useState<"original" | "heatmap" | "energy">("original");
   const images = {
@@ -45,6 +47,8 @@ export function PredictionImages({ original, heatmap, energy, comparison = false
         </button>
       ))}
     </div>
-    <Picture className="result-picture" src={src} alt={alt} />
+    {zoomable && src
+      ? <ZoomablePredictionImage key={`${view}:${src}`} src={src} alt={alt} />
+      : <Picture className={cn("result-picture", zoomable && "prediction-zoom-frame")} src={src} alt={alt} />}
   </>;
 }

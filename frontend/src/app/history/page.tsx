@@ -83,7 +83,7 @@ export default function HistoryPage() {
       onSelect={item => { setDetail({ loading: true }); setSelected(item); }}
       onPage={setPage} onRetry={() => setRetry(retry + 1)} />
     {selected && (
-      <Modal title="Chi tiết dự đoán" onClose={() => setSelected(undefined)}>
+      <Modal title="Chi tiết phân loại" wide onClose={() => setSelected(undefined)}>
         <div className="history-modal-detail" aria-busy={detail.loading}>
           {detail.loading && <Skeleton rows={1} />}
           {detail.error && <p className="inline-error" role="alert">{detail.error} Đang hiển thị thông tin từ bảng lịch sử.</p>}

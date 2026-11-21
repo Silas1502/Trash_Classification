@@ -3,8 +3,9 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/Primitives";
+import { cn } from "@/lib/utils";
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
   useEffect(() => {
@@ -18,7 +19,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     onClose();
   }
 
-  return <dialog className="modal panel" ref={ref} aria-labelledby={id}
+  return <dialog className={cn("modal panel", wide && "modal-wide")} ref={ref} aria-labelledby={id}
     onCancel={event => { event.preventDefault(); close(); }}
     onClick={event => { if (event.target === event.currentTarget) close(); }}>
     <div className="modal-content">

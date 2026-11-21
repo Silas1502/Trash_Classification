@@ -325,12 +325,36 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .modal .panel-head { justify-content: space-between; }
 .prediction-details, .failed-detail { display: grid; gap: 10px; padding: 13px; min-width: 0; }
 .prediction-details .image-tabs { margin-bottom: 0; }
+.prediction-details { grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); align-items: start; gap: 20px; padding: 16px; }
+.prediction-detail-gallery, .prediction-detail-results { display: grid; gap: 10px; min-width: 0; }
+.prediction-detail-gallery .image-tabs button { min-height: 36px; }
+.prediction-zoom-frame {
+  display: grid; grid-template-rows: minmax(0, 1fr); place-items: center; width: 100%; height: clamp(220px, 55svh, 540px);
+  overflow: hidden; border-radius: 9px; background: #e6edf6; touch-action: none;
+}
+.prediction-zoom-frame img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; user-select: none; }
+.prediction-zoom-frame.is-zoomed { cursor: grab; }
+.prediction-zoom-frame.is-zoomed:active { cursor: grabbing; }
+.prediction-zoom-controls { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 7px; }
+.prediction-zoom-controls .button { min-height: 44px; min-width: 44px; padding: 6px 10px; font-size: 14px; }
+.prediction-zoom-controls output { min-width: 4ch; text-align: center; font-variant-numeric: tabular-nums; }
+.prediction-detail-summary { display: grid; gap: 8px; padding: 12px; border-radius: 9px; background: #e7f0fd; }
+.prediction-detail-class, .prediction-detail-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; }
+.prediction-detail-class > span:first-child { font-weight: 650; }
+.prediction-detail-class .waste-badge { min-width: 0; font-size: 1.2em; }
+.prediction-detail-gates { display: grid; gap: 6px; margin: 0; }
+.prediction-detail-gates > div {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px;
+}
+.prediction-detail-gates dt { font-weight: 650; }
+.prediction-detail-gates dd { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 7px; margin: 0; color: var(--blue); }
 .details-list { margin: 0; padding: 0; }
 .detail-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 1px; border-bottom: 1px solid #dce5f0; font-size: clamp(14px, .96vw, 16px); }
-.detail-row dt { display: flex; align-items: center; gap: 7px; flex: none; }
+.detail-row dt { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .detail-row dd { margin: 0; min-width: 0; text-align: right; }
 .detail-row time { font-weight: 650; }
-.detail-filename { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-filename { display: block; overflow-wrap: anywhere; }
 .inline-error { padding: 10px 13px 0; color: #923626; font-size: 13px; }
 
 .badge { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 4px 9px; border-radius: 8px; font-size: .9em; font-weight: 650; white-space: nowrap; line-height: 1.2; }
@@ -352,6 +376,7 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .history-modal-detail > .skeleton-stack { padding: 8px 13px 0; }
 .history-modal-detail > .skeleton-stack .skeleton { height: 5px; }
 .modal { color: var(--ink); width: min(580px, calc(100% - 24px)); max-height: calc(100dvh - 36px); padding: 0; background: var(--paper); box-shadow: 0 16px 55px #09224745; }
+.modal-wide { width: min(1150px, calc(100% - 24px)); }
 .modal[open] { animation: appear .2s ease-out; }
 .modal::backdrop { background: #0a1a3c85; }
 .toast-list { position: fixed; z-index: 8; right: 15px; bottom: 15px; display: grid; gap: 7px; max-width: min(420px, calc(100% - 30px)); }
@@ -380,6 +405,9 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
   .batch-filters { flex: 1 0 100%; }
 }
 @media (max-width: 790px) {
+  .prediction-details { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 14px; }
+  .prediction-zoom-frame { height: clamp(190px, 40svh, 380px); }
+
   .workspace { margin-left: 0; border-top: 0; }
   .sidebar { position: sticky; inset: 0 0 auto; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 7px 13px; width: 100%; padding: 8px 12px; }
   .sidebar nav { display: flex; flex-wrap: wrap; }

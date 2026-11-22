@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { CircleCheck, Hand, Images, LoaderCircle } from "lucide-react";
 import HistoryDailyTable from "@/components/history/HistoryDailyTable";
 import { Button, Skeleton } from "@/components/ui/Primitives";
@@ -42,14 +42,15 @@ function share(value: number, total: number) {
   return new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 }).format(total > 0 ? value * 100 / total : 0) + "%";
 }
 
-type TooltipEntry = { label: string; count: number; total: number; scope: "range" | "interval" };
+type DecisionCounts = Pick<HistoryTrendPoint, "automatic" | "needs_review">;
+type TooltipEntry = { label: string; count: number; total: number; breakdown?: DecisionCounts };
 
 function useChartTooltip(total: number) {
   const id = useId();
   const [value, setValue] = useState<TooltipEntry & { x: number; y: number }>();
 
   function show(entry: TooltipEntry, x: number, y: number) {
-    const height = entry.scope === "interval" ? 124 : 104;
+    const height = entry.breakdown ? 145 : 104;
     setValue({
       ...entry,
       x: Math.max(8, Math.min(x + 12, window.innerWidth - 242)),
@@ -59,19 +60,18 @@ function useChartTooltip(total: number) {
 
   function hide() { setValue(undefined); }
 
-  function target(label: string, count: number, denominator = total, scope: TooltipEntry["scope"] = "range") {
-    const entry: TooltipEntry = { label, count, total: denominator, scope };
-    const context = scope === "interval" ? "tại mốc này" : "trong khoảng";
+  function target(label: string, count: number, denominator = total, breakdown?: DecisionCounts) {
+    const entry: TooltipEntry = { label, count, total: denominator, breakdown };
     function showAtElement(element: Element) {
       const rect = element.getBoundingClientRect();
-      show(entry, rect.x + rect.width / 2, rect.y);
+      show(entry, rect.x + rect.width / 2, rect.y + rect.height / 2);
     }
 
     return {
       tabIndex: 0,
-      "aria-label": denominator > 0
-        ? `${label}, ${countFormat.format(count)} ảnh, ${share(count, denominator)} trên tổng ${countFormat.format(denominator)} ảnh ${context}`
-        : `${label}, ${countFormat.format(count)} ảnh`,
+      "aria-label": breakdown
+        ? `${label}, Tự động ${countFormat.format(breakdown.automatic)} ảnh, Cần kiểm tra ${countFormat.format(breakdown.needs_review)} ảnh`
+        : `${label}, ${countFormat.format(count)} ảnh, ${share(count, denominator)} trên tổng ${countFormat.format(denominator)} ảnh trong khoảng`,
       "aria-describedby": value?.label === label ? id : undefined,
       onPointerEnter: (event: React.PointerEvent<Element>) => show(entry, event.clientX, event.clientY),
       onPointerMove: (event: React.PointerEvent<Element>) => show(entry, event.clientX, event.clientY),
@@ -85,10 +85,18 @@ function useChartTooltip(total: number) {
 
   const tooltip = value && <div id={id} className="chart-tooltip" role="tooltip" style={{ left: value.x, top: value.y }}>
     <strong>{value.label}</strong>
-    <span><b>{countFormat.format(value.count)} ảnh</b>{value.total > 0 && <> · {share(value.count, value.total)}</>}</span>
-    {value.scope === "interval"
-      ? <small>{value.total > 0 ? `trên tổng ${countFormat.format(value.total)} ảnh thuộc hai luồng tại mốc này` : "Không có ảnh thuộc hai luồng tại mốc này"}</small>
-      : <small>trên tổng {countFormat.format(value.total)} ảnh trong khoảng</small>}
+    {value.breakdown ? <>
+      {decisionSeries.map(({ field, label, tone }) => {
+        const count = value.breakdown?.[field] ?? 0;
+        return <span key={field} className={`chart-tooltip-${tone}`}>
+          {label} <b>{countFormat.format(count)} ảnh</b>{value.total > 0 && <> · {share(count, value.total)}</>}
+        </span>;
+      })}
+      <small>Tổng hai luồng tại mốc này {countFormat.format(value.count)} ảnh</small>
+    </> : <>
+      <span><b>{countFormat.format(value.count)} ảnh</b>{value.total > 0 && <> · {share(value.count, value.total)}</>}</span>
+      <small>trên tổng {countFormat.format(value.total)} ảnh trong khoảng</small>
+    </>}
   </div>;
   return { target, tooltip, hide };
 }
@@ -147,53 +155,85 @@ function TimeChart({ points, interaction }: TimeChartProps) {
   </figure>;
 }
 
-function DecisionHeatmap({ points, interaction }: TimeChartProps) {
-  const title = "Tự động và cần kiểm tra theo thời gian";
-  const peak = Math.max(1, ...points.filter(point => !point.is_future)
-    .map(point => Math.max(point.automatic, point.needs_review)));
-  const labelStep = Math.max(1, Math.ceil(points.length / 7));
+const stackedSlotWidth = 46;
 
-  return <figure className="history-chart decision-heatmap">
-    <figcaption>{title}</figcaption>
-    <div className="heatmap-body">
-      <div className="heatmap-scroll" onScroll={interaction.hide}>
-        <table className="heatmap-table" aria-label={title} style={{ "--heatmap-slots": points.length } as React.CSSProperties}>
-          <thead>
-            <tr>
-              <th className="heatmap-row-label" scope="col">Luồng xử lý</th>
-              {points.map((point, index) => {
-                const label = axisLabel(point);
-                const visible = index === points.length - 1 || (index % labelStep === 0 && (labelStep === 1 || index < points.length - 2));
-                return <th key={point.start_at ?? point.start_date} scope="col" aria-label={interval(point)}>
-                  {visible && <span className="heatmap-time">{label}</span>}
-                </th>;
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {decisionSeries.map(({ field, label, tone }) => <tr key={field} className={`heatmap-${tone}`}>
-              <th className="heatmap-row-label" scope="row"><i aria-hidden />{label}</th>
-              {points.map(point => {
-                const count = point[field];
-                const level = Math.ceil(count * 4 / peak);
-                return <td key={point.start_at ?? point.start_date}>
-                  {point.is_future
-                    ? <span className="heatmap-cell heatmap-future"><span className="sr-only">Chưa đến</span></span>
-                    : <button type="button" className="heatmap-cell" data-level={level}
-                        {...interaction.target(`${interval(point)} · ${label}`, count, point.automatic + point.needs_review, "interval")}>
-                        {count > 0 && <span>{countFormat.format(count)}</span>}
-                      </button>}
-                </td>;
-              })}
-            </tr>)}
-          </tbody>
-        </table>
+function StackedDecisionChart({ points, interaction }: TimeChartProps) {
+  const title = "Tự động và cần kiểm tra theo thời gian";
+  const titleId = useId();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  const firstFuture = points.findIndex(point => point.is_future);
+  const observedCount = firstFuture === -1 ? points.length : firstFuture;
+  const peak = Math.max(0, ...points.filter(point => !point.is_future).map(point => point.automatic + point.needs_review));
+  const step = Math.max(1, Math.ceil(peak / 4));
+  const divisions = Math.max(1, Math.ceil(peak / step));
+  const maximum = divisions * step;
+  const ticks = Array.from({ length: divisions + 1 }, (_, index) => index * step);
+  const height = (count: number) => `${count * 100 / maximum}%`;
+
+  useLayoutEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport || points.length === 0) return;
+
+    const mostRecent = viewport.scrollWidth * observedCount / points.length;
+    viewport.scrollLeft = Math.max(0, mostRecent - viewport.clientWidth);
+
+    const checkOverflow = () => setOverflowing(viewport.scrollWidth > viewport.clientWidth);
+    checkOverflow();
+    const observer = new ResizeObserver(checkOverflow);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [points, observedCount]);
+
+  return <figure className="history-chart stacked-decision-chart" aria-labelledby={titleId}>
+    <figcaption id={titleId}>{title}</figcaption>
+    <div className="stacked-chart-legend">
+      {decisionSeries.map(({ field, label, tone }) => <span key={field}>
+        <i className={`stacked-fill-${tone}`} aria-hidden />{label}
+      </span>)}
+      {firstFuture !== -1 && <span><i className="stacked-future-mark" aria-hidden />Chưa đến</span>}
+    </div>
+    <div className="stacked-chart-layout">
+      <div className="stacked-chart-axis" aria-hidden>
+        <span className="stacked-axis-width">{countFormat.format(maximum)}</span>
+        {ticks.map(value => <span className="stacked-axis-tick" key={value} style={{ bottom: height(value) }}>
+          {countFormat.format(value)}
+        </span>)}
       </div>
-      <div className="heatmap-legend">
-        <span><i className="heatmap-zero" aria-hidden />0 ảnh</span>
-        {points.some(point => point.is_future) && <span><i className="heatmap-future" aria-hidden />Chưa đến</span>}
-        <span>Màu càng đậm, số ảnh càng nhiều</span>
+      <div className="stacked-chart-scroll" ref={scrollRef} onScroll={interaction.hide}
+        role="group" aria-label="Số ảnh theo từng mốc thời gian" tabIndex={overflowing ? 0 : undefined}>
+        <div className="stacked-chart-track" style={{ minWidth: points.length * stackedSlotWidth }}>
+          <div className="stacked-chart-grid" aria-hidden>
+            {ticks.map(value => <i key={value} style={{ bottom: height(value) }} />)}
+          </div>
+          {points.map(point => {
+            const count = point.automatic + point.needs_review;
+            return <div className="stacked-chart-bucket" key={point.start_at ?? point.start_date}>
+              <div className="stacked-chart-slot">
+                {point.is_future
+                  ? <span className="stacked-future-mark"><span className="sr-only">Chưa đến</span></span>
+                  : <button type="button" className="stacked-chart-target"
+                      {...interaction.target(interval(point), count, count, point)}>
+                      {count > 0 ? <>
+                        <span className="stacked-chart-column" style={{ height: height(count) }} aria-hidden>
+                          {decisionSeries.map(({ field, tone }) => point[field] > 0 &&
+                            <span key={field} className={`stacked-fill-${tone}`} style={{ flexGrow: point[field] }} />)}
+                        </span>
+                        <span className="stacked-chart-total" style={{ bottom: height(count) }} aria-hidden>
+                          {countFormat.format(count)}
+                        </span>
+                      </> : <span className="stacked-zero-mark" aria-hidden />}
+                    </button>}
+              </div>
+              <span className="stacked-chart-time" aria-hidden>{axisLabel(point)}</span>
+            </div>;
+          })}
+        </div>
       </div>
+    </div>
+    <div className="stacked-chart-footer">
+      {overflowing && <span>Cuộn ngang để xem thêm</span>}
+      <span>Thời gian</span>
     </div>
   </figure>;
 }
@@ -328,7 +368,7 @@ export default function HistoryCharts() {
       <PredictionSummary data={data} />
       <div className="trend-charts" aria-busy={loading}>
         <TimeChart key={data.points[0]?.start_date + "-total"} points={data.points} interaction={interaction} />
-        <DecisionHeatmap key={period} points={data.points} interaction={interaction} />
+        <StackedDecisionChart points={data.points} interaction={interaction} />
         <WasteChart key={data.points[0]?.start_date + "-waste"} counts={data.by_waste_type} interaction={interaction} />
         <WasteCharacteristics />
       </div>

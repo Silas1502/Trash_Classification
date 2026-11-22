@@ -220,41 +220,54 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .chart-line { fill: none; stroke: #2162ba; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart-point { fill: #2162ba; stroke: #fff; stroke-width: 1.2; }
 .chart-line-spacer { min-height: 28px; }
-.heatmap-body { display: flex; flex: 1; min-width: 0; flex-direction: column; justify-content: center; gap: 12px; }
-.heatmap-scroll { min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #b3c8e3 #edf3fa; }
-.heatmap-table {
-  width: 100%; min-width: calc(7rem + var(--heatmap-slots) * 17px);
-  table-layout: fixed; border-collapse: separate; border-spacing: 2px 5px;
+.stacked-decision-chart { --stacked-height: 210px; --stacked-headroom: 22px; }
+.stacked-chart-legend {
+  display: flex; flex-wrap: wrap; gap: 5px 14px; min-height: 22px; margin-bottom: 6px;
+  color: #425873; font-size: .92rem;
 }
-.heatmap-table th, .heatmap-table td { padding: 0; }
-.heatmap-table thead th { position: relative; height: 25px; color: #425873; font-size: .78rem; font-weight: 600; }
-.heatmap-time { position: absolute; inset: auto auto 3px 50%; width: max-content; transform: translateX(-50%); white-space: nowrap; }
-.heatmap-table th:last-child .heatmap-time { inset: auto 0 3px auto; transform: none; }
-.heatmap-table .heatmap-row-label {
-  position: sticky; left: 0; z-index: 1; width: 6.8rem; padding-right: 6px;
-  background: #fcfdff; text-align: left; font-size: .88rem; white-space: nowrap;
+.stacked-chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.stacked-chart-legend i { width: 11px; height: 11px; border-radius: 2px; }
+.stacked-chart-layout {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); min-width: 0; margin-block: auto;
 }
-.heatmap-auto { --heatmap-low: #dff3e9; --heatmap-mid: #afd9c3; --heatmap-strong: #77b497; --heatmap-high: #226348; }
-.heatmap-review { --heatmap-low: #ffead4; --heatmap-mid: #f5cfa0; --heatmap-strong: #e5a45d; --heatmap-high: #9a4816; }
-.heatmap-row-label i {
-  display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; background: var(--heatmap-high);
+.stacked-chart-axis {
+  position: relative; height: var(--stacked-height); min-width: 30px; margin-top: var(--stacked-headroom);
+  padding-right: 8px; color: #435b76; font-size: .88rem; font-variant-numeric: tabular-nums;
 }
-.heatmap-cell {
-  display: grid; place-items: center; width: 100%; height: 44px; border-radius: 4px;
-  background: #e9eff6; color: #102d39; font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums;
+.stacked-axis-width { visibility: hidden; }
+.stacked-axis-tick { position: absolute; right: 8px; transform: translateY(50%); }
+.stacked-chart-scroll {
+  min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; scrollbar-color: #a7bfdc #edf3fa;
 }
-.heatmap-cell > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-button.heatmap-cell { cursor: pointer; }
-button.heatmap-cell:is(:hover, :focus-visible) { outline: 2px solid #173f72; outline-offset: -2px; }
-.heatmap-cell[data-level="1"] { background: var(--heatmap-low); }
-.heatmap-cell[data-level="2"] { background: var(--heatmap-mid); }
-.heatmap-cell[data-level="3"] { background: var(--heatmap-strong); }
-.heatmap-cell[data-level="4"] { background: var(--heatmap-high); color: #fff; }
-.heatmap-future { background: repeating-linear-gradient(135deg, #f5f7fb 0 4px, #e7ecf4 4px 6px); }
-.heatmap-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; color: #425873; font-size: .85rem; }
-.heatmap-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.heatmap-legend i { width: 11px; height: 11px; border-radius: 2px; }
-.heatmap-zero { background: #e9eff6; }
+.stacked-chart-track {
+  position: relative; display: grid; width: 100%; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  padding-top: var(--stacked-headroom);
+}
+.stacked-chart-grid { position: absolute; top: var(--stacked-headroom); inset-inline: 0; height: var(--stacked-height); pointer-events: none; }
+.stacked-chart-grid i { position: absolute; inset-inline: 0; height: 1px; background: #dce6f3; }
+.stacked-chart-bucket { position: relative; min-width: 0; text-align: center; }
+.stacked-chart-slot { position: relative; height: var(--stacked-height); }
+.stacked-chart-target { position: relative; display: block; width: 100%; height: 100%; cursor: crosshair; }
+.stacked-chart-target:is(:hover, :focus-visible) { background: #e9f1fc70; }
+.stacked-chart-target:focus-visible { outline-offset: -2px; }
+.stacked-chart-column, .stacked-chart-total, .stacked-zero-mark, .stacked-chart-slot > .stacked-future-mark {
+  position: absolute; left: 50%; transform: translateX(-50%);
+}
+.stacked-chart-column {
+  bottom: 0; display: flex; flex-direction: column-reverse; width: 28px; border-radius: 4px 4px 0 0; overflow: hidden;
+}
+.stacked-chart-column > span { flex-basis: 0; }
+.stacked-fill-auto { background: #368964; }
+.stacked-fill-review { background: #bd741f; }
+.stacked-chart-total { margin-bottom: 4px; color: #234873; font-size: .8rem; font-weight: 650; }
+.stacked-zero-mark, .stacked-chart-slot > .stacked-future-mark { bottom: 0; width: 28px; height: 3px; }
+.stacked-zero-mark { border-radius: 2px 2px 0 0; background: #a7b9ce; }
+.stacked-future-mark { border: 1px dashed #8ca0b9; }
+.stacked-chart-time { display: block; padding: 5px 0 4px; color: #435b76; font-size: .83rem; white-space: nowrap; }
+.stacked-chart-footer {
+  display: flex; gap: 10px; min-height: 20px; margin-top: 6px; color: #526783; font-size: .82rem;
+}
+.stacked-chart-footer span:last-child { margin-left: auto; }
 .donut-layout { display: grid; grid-template-columns: minmax(0, 1fr) 135px; align-items: center; gap: 8px; flex: 1; min-height: 0; }
 .donut-chart-svg { display: block; width: 100%; height: 280px; min-width: 0; }
 .donut-track, .donut-segment { fill: none; stroke-width: 48; }
@@ -275,6 +288,8 @@ button.heatmap-cell:is(:hover, :focus-visible) { outline: 2px solid #173f72; out
 .chart-value:focus-visible { outline: none; }
 .chart-value:focus-visible .chart-point { stroke: #0b2149; stroke-width: 2; }
 .chart-tooltip { position: fixed; z-index: 50; display: grid; gap: 3px; width: 230px; padding: 10px 13px; pointer-events: none; background: #fff; border: 1px solid #cbd9ed; border-radius: 10px; box-shadow: 0 5px 18px #153a6726; color: #193c69; font-size: 16px; }
+.chart-tooltip-auto { color: #246347; }
+.chart-tooltip-review { color: #8c4f0e; }
 .chart-tooltip small { color: #61758f; font-size: 14px; }
 .waste-characteristics dl { display: grid; margin-top: 2px; }
 .waste-characteristics dl > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-top: 1px solid #e1eaf6; }
@@ -293,8 +308,6 @@ button.heatmap-cell:is(:hover, :focus-visible) { outline: 2px solid #173f72; out
   .chart-summary-card dt { font-size: 1rem; }
   .chart-summary-card dd { font-size: 1.7rem; }
   .history-chart .analytics-chart-svg { min-width: 560px; }
-  .decision-heatmap { min-height: 240px; }
-  .heatmap-table { min-width: calc(7rem + var(--heatmap-slots) * 28px); }
   .donut-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .donut-chart-svg { height: 210px; }
   .donut-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }

@@ -219,14 +219,42 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .chart-area { fill: #edf4ff; opacity: .8; }
 .chart-line { fill: none; stroke: #2162ba; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart-point { fill: #2162ba; stroke: #fff; stroke-width: 1.2; }
-.chart-series-auto { color: #368964; }
-.chart-series-review { color: #a86210; }
-.chart-line.chart-series-auto, .chart-line.chart-series-review { stroke: currentColor; }
-.chart-line.chart-series-review { stroke-dasharray: 4 4; }
-.chart-legend { display: flex; flex-wrap: wrap; gap: 5px 13px; min-height: 22px; margin-bottom: 6px; color: #425873; font-size: 1em; }
-.chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.chart-legend .chart-swatch { width: 20px; border-top: 2px solid currentColor; }
-.chart-legend .chart-series-review { border-top-style: dashed; }
+.chart-line-spacer { min-height: 28px; }
+.heatmap-body { display: flex; flex: 1; min-width: 0; flex-direction: column; justify-content: center; gap: 12px; }
+.heatmap-scroll { min-width: 0; overflow-x: auto; scrollbar-width: thin; scrollbar-color: #b3c8e3 #edf3fa; }
+.heatmap-table {
+  width: 100%; min-width: calc(7rem + var(--heatmap-slots) * 17px);
+  table-layout: fixed; border-collapse: separate; border-spacing: 2px 5px;
+}
+.heatmap-table th, .heatmap-table td { padding: 0; }
+.heatmap-table thead th { position: relative; height: 25px; color: #425873; font-size: .78rem; font-weight: 600; }
+.heatmap-time { position: absolute; inset: auto auto 3px 50%; width: max-content; transform: translateX(-50%); white-space: nowrap; }
+.heatmap-table th:last-child .heatmap-time { inset: auto 0 3px auto; transform: none; }
+.heatmap-table .heatmap-row-label {
+  position: sticky; left: 0; z-index: 1; width: 6.8rem; padding-right: 6px;
+  background: #fcfdff; text-align: left; font-size: .88rem; white-space: nowrap;
+}
+.heatmap-auto { --heatmap-low: #dff3e9; --heatmap-mid: #afd9c3; --heatmap-strong: #77b497; --heatmap-high: #226348; }
+.heatmap-review { --heatmap-low: #ffead4; --heatmap-mid: #f5cfa0; --heatmap-strong: #e5a45d; --heatmap-high: #9a4816; }
+.heatmap-row-label i {
+  display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 2px; background: var(--heatmap-high);
+}
+.heatmap-cell {
+  display: grid; place-items: center; width: 100%; height: 44px; border-radius: 4px;
+  background: #e9eff6; color: #102d39; font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.heatmap-cell > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.heatmap-cell { cursor: pointer; }
+button.heatmap-cell:is(:hover, :focus-visible) { outline: 2px solid #173f72; outline-offset: -2px; }
+.heatmap-cell[data-level="1"] { background: var(--heatmap-low); }
+.heatmap-cell[data-level="2"] { background: var(--heatmap-mid); }
+.heatmap-cell[data-level="3"] { background: var(--heatmap-strong); }
+.heatmap-cell[data-level="4"] { background: var(--heatmap-high); color: #fff; }
+.heatmap-future { background: repeating-linear-gradient(135deg, #f5f7fb 0 4px, #e7ecf4 4px 6px); }
+.heatmap-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 14px; color: #425873; font-size: .85rem; }
+.heatmap-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.heatmap-legend i { width: 11px; height: 11px; border-radius: 2px; }
+.heatmap-zero { background: #e9eff6; }
 .donut-layout { display: grid; grid-template-columns: minmax(0, 1fr) 135px; align-items: center; gap: 8px; flex: 1; min-height: 0; }
 .donut-chart-svg { display: block; width: 100%; height: 280px; min-width: 0; }
 .donut-track, .donut-segment { fill: none; stroke-width: 48; }
@@ -246,16 +274,7 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
 .chart-value { cursor: crosshair; }
 .chart-value:focus-visible { outline: none; }
 .chart-value:focus-visible .chart-point { stroke: #0b2149; stroke-width: 2; }
-.chart-comparison-guide { stroke: #93aac9; vector-effect: non-scaling-stroke; }
-.chart-comparison-point { fill: currentColor; stroke: #fff; stroke-width: 1; }
-.chart-comparison-guide, .chart-comparison-point { opacity: 0; }
-.chart-comparison-value:hover :is(.chart-comparison-guide, .chart-comparison-point),
-.chart-comparison-value:focus :is(.chart-comparison-guide, .chart-comparison-point),
-.chart-comparison-value[aria-describedby] .chart-comparison-point,
-.chart-comparison-point[data-single-point] { opacity: 1; }
 .chart-tooltip { position: fixed; z-index: 50; display: grid; gap: 3px; width: 230px; padding: 10px 13px; pointer-events: none; background: #fff; border: 1px solid #cbd9ed; border-radius: 10px; box-shadow: 0 5px 18px #153a6726; color: #193c69; font-size: 16px; }
-.chart-tooltip-auto { color: #24734e; }
-.chart-tooltip-review { color: #986017; }
 .chart-tooltip small { color: #61758f; font-size: 14px; }
 .waste-characteristics dl { display: grid; margin-top: 2px; }
 .waste-characteristics dl > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-top: 1px solid #e1eaf6; }
@@ -273,9 +292,9 @@ figcaption { display: flex; align-items: center; gap: 10px; font-weight: 700; ma
   .chart-summary-card { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; }
   .chart-summary-card dt { font-size: 1rem; }
   .chart-summary-card dd { font-size: 1.7rem; }
-  .history-chart .analytics-chart-svg:not(.analytics-chart-comparison) { min-width: 560px; }
-  .analytics-chart-comparison text { font-size: 26px; }
-  .analytics-chart-comparison .chart-axis-label { font-size: 24px; }
+  .history-chart .analytics-chart-svg { min-width: 560px; }
+  .decision-heatmap { min-height: 240px; }
+  .heatmap-table { min-width: calc(7rem + var(--heatmap-slots) * 28px); }
   .donut-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .donut-chart-svg { height: 210px; }
   .donut-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; }
